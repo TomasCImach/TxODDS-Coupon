@@ -64,7 +64,7 @@ integration("GoalDrop HTTP contracts", () => {
     });
     pool = createPool(databaseUrl);
     await pool.query(`TRUNCATE TABLE
-      analytics_events, demo_faucet_claims, sponsored_transaction_templates, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
+      analytics_events, demo_faucet_claims, sponsored_transaction_templates, chain_transactions, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
       registration_projections, round_projections, campaign_projections, fixture_catalog,
       txline_events, txline_cursors, goal_decisions, audit_log,
       outbox, application_events RESTART IDENTITY CASCADE`);
@@ -264,7 +264,31 @@ integration("GoalDrop HTTP contracts", () => {
     expect(response.json()).toMatchObject({ error: "request_rejected" });
   });
 
+  it("reports live feed degraded when the listener kill switch is off", async () => {
+    config.TXLINE_LISTENER_ENABLED = false;
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/health/public",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        status: "degraded",
+        degraded: ["live_feed"],
+        demoMode: false,
+      });
+    } finally {
+      config.TXLINE_LISTENER_ENABLED = true;
+    }
+  });
+
   it("exports operational backlog and retention gauges", async () => {
+    await pool.query(
+      `INSERT INTO chain_transactions
+         (purpose, aggregate_key, status, trace_id)
+       VALUES ('test_lost_response', 'metrics-test', 'ambiguous', $1)`,
+      [crypto.randomUUID()],
+    );
     const response = await app.inject({
       method: "GET",
       url: "/internal/metrics",
@@ -285,6 +309,9 @@ integration("GoalDrop HTTP contracts", () => {
     expect(response.body).toContain("goaldrop_oldest_outbox_age_seconds");
     expect(response.body).toContain("goaldrop_txline_heartbeat_age_seconds");
     expect(response.body).toContain("goaldrop_database_pool_connections");
+    expect(response.body).toMatch(
+      /goaldrop_ambiguous_transactions 1(?:\.0+)?\n/,
+    );
   });
 
   it("accepts allowlisted cookieless analytics and rejects wallet data", async () => {

@@ -10,7 +10,7 @@ import {
 import type { DatabasePool } from "@goaldrop/db";
 import type { ServiceConfig } from "../config.js";
 
-interface Credentials {
+export interface Credentials {
   guestJwt: string;
   apiToken: string;
 }
@@ -26,6 +26,11 @@ export async function runTxlineSupervisor(
   logger: ListenerLogger,
   signal: AbortSignal,
 ): Promise<void> {
+  if (!config.TXLINE_LISTENER_ENABLED) {
+    logger.warn({}, "TxLINE listener disabled by operator kill switch");
+    await untilAborted(signal);
+    return;
+  }
   const credentials: Credentials = {
     guestJwt: config.TXLINE_GUEST_JWT ?? "",
     apiToken: config.TXLINE_API_TOKEN ?? "",
@@ -139,15 +144,14 @@ async function syncFixtureCatalog(
     "startEpochDay",
     String(Math.floor(Date.now() / 86_400_000)),
   );
-  let response = await authenticatedFetch(url, credentials, undefined, signal);
-  if (response.status === 401) {
-    credentials.guestJwt = await renewGuestJwt(config, signal);
-    response = await authenticatedFetch(url, credentials, undefined, signal);
-  }
-  if (response.status === 403)
-    throw new TxlineEntitlementError("TxLINE fixture snapshot returned 403");
-  if (!response.ok)
-    throw new Error(`TxLINE fixture snapshot returned ${response.status}`);
+  const response = await authenticatedFetchWithRenewal(
+    url,
+    config,
+    credentials,
+    undefined,
+    signal,
+  );
+  requireTxlineSuccess(response, "fixture snapshot");
   const fixtures = fixtureSnapshot.parse(await response.json());
   for (const fixture of fixtures) {
     const start = BigInt(fixture.StartTime);
@@ -238,22 +242,14 @@ async function consumeStream(
 ): Promise<void> {
   const url = new URL("/api/scores/stream", config.TXLINE_API_ORIGIN);
   url.searchParams.set("fixtureId", fixtureId.toString());
-  let response = await authenticatedFetch(
+  const response = await authenticatedFetchWithRenewal(
     url,
+    config,
     credentials,
     lastEventId,
     signal,
   );
-  if (response.status === 401) {
-    credentials.guestJwt = await renewGuestJwt(config, signal);
-    response = await authenticatedFetch(url, credentials, lastEventId, signal);
-  }
-  if (response.status === 403)
-    throw new TxlineEntitlementError(
-      "TxLINE returned 403 for the Devnet subscription",
-    );
-  if (!response.ok || !response.body)
-    throw new Error(`TxLINE stream returned ${response.status}`);
+  requireTxlineSuccess(response, "stream", true);
   await pool.query(
     `INSERT INTO txline_cursors (fixture_id, subscription_key, last_sse_id, connected_at, heartbeat_at)
      VALUES ($1,'devnet-world-cup',$2,clock_timestamp(),clock_timestamp())
@@ -272,7 +268,7 @@ async function consumeStream(
       await ingestTxlineRecord(config, pool, record, event.rawData, event.id);
     });
   });
-  const reader = response.body.getReader();
+  const reader = response.body!.getReader();
   try {
     while (!signal.aborted) {
       const item = await reader.read();
@@ -317,20 +313,14 @@ async function reconcileRecentIntervals(
       config.TXLINE_API_ORIGIN,
     );
     url.searchParams.set("fixtureId", fixtureId.toString());
-    let response = await authenticatedFetch(
+    const response = await authenticatedFetchWithRenewal(
       url,
+      config,
       credentials,
       undefined,
       signal,
     );
-    if (response.status === 401) {
-      credentials.guestJwt = await renewGuestJwt(config, signal);
-      response = await authenticatedFetch(url, credentials, undefined, signal);
-    }
-    if (response.status === 403)
-      throw new TxlineEntitlementError("TxLINE recovery returned 403");
-    if (!response.ok)
-      throw new Error(`TxLINE recovery returned ${response.status}`);
+    requireTxlineSuccess(response, "recovery");
     const records = await response.json();
     if (!Array.isArray(records))
       throw new Error("TxLINE recovery payload is not an array");
@@ -362,6 +352,39 @@ async function authenticatedFetch(
     },
     signal,
   });
+}
+
+export async function authenticatedFetchWithRenewal(
+  url: URL,
+  config: ServiceConfig,
+  credentials: Credentials,
+  lastEventId: string | undefined,
+  signal: AbortSignal,
+): Promise<Response> {
+  if (url.origin !== new URL(config.TXLINE_API_ORIGIN).origin)
+    throw new Error("refusing to send TxLINE credentials to a different host");
+  let response = await authenticatedFetch(
+    url,
+    credentials,
+    lastEventId,
+    signal,
+  );
+  if (response.status === 401) {
+    credentials.guestJwt = await renewGuestJwt(config, signal);
+    response = await authenticatedFetch(url, credentials, lastEventId, signal);
+  }
+  return response;
+}
+
+export function requireTxlineSuccess(
+  response: Response,
+  context: string,
+  requireBody = false,
+): void {
+  if (response.status === 403)
+    throw new TxlineEntitlementError(`TxLINE ${context} returned 403`);
+  if (!response.ok || (requireBody && !response.body))
+    throw new Error(`TxLINE ${context} returned ${response.status}`);
 }
 
 async function renewGuestJwt(
@@ -595,7 +618,7 @@ async function publishDegraded(
   }
 }
 
-class TxlineEntitlementError extends Error {}
+export class TxlineEntitlementError extends Error {}
 
 function safeMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown error";
@@ -612,4 +635,11 @@ function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
       { once: true },
     );
   });
+}
+
+function untilAborted(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) =>
+    signal.addEventListener("abort", () => resolve(), { once: true }),
+  );
 }

@@ -33,11 +33,11 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://goaldrop:goaldrop@127.0.0.1:5432/goaldrop
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.33.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.89.0 --profile minimal --no-self-update
       - run: cargo +1.89.0 test -p goaldrop --all-targets --locked
@@ -61,11 +61,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.33.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
@@ -79,6 +79,8 @@ jobs:
           chmod +x "$RUNNER_TEMP/anchor"
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/agave.tar.bz2" \
             https://release.anza.xyz/v2.3.0/solana-release-x86_64-unknown-linux-gnu.tar.bz2
+          echo "5f25b850ce80278507a98947833fcd48423391f6d145046ffb0c5fd130dec436  $RUNNER_TEMP/anchor" | sha256sum --check --strict
+          echo "56241fbe862495ff01b2b875195e44f94c22e9f2a504591a3ade1b9d82862730  $RUNNER_TEMP/agave.tar.bz2" | sha256sum --check --strict
           mkdir "$RUNNER_TEMP/agave"
           tar -xjf "$RUNNER_TEMP/agave.tar.bz2" -C "$RUNNER_TEMP/agave"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"

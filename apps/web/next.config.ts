@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { resolvePasskeyDeploymentConfig } from "./src/lib/deployment-config";
 
 const browserApiOrigin = (() => {
   try {
@@ -11,13 +12,10 @@ const browserApiOrigin = (() => {
   }
 })();
 
-const deploymentTier = process.env.NEXT_PUBLIC_DEPLOYMENT_TIER ?? "devnet";
-if (!["devnet", "production"].includes(deploymentTier))
-  throw new Error("NEXT_PUBLIC_DEPLOYMENT_TIER must be devnet or production");
-if (deploymentTier === "production" && !process.env.NEXT_PUBLIC_PASSKEY_APP_ID)
-  throw new Error(
-    "NEXT_PUBLIC_PASSKEY_APP_ID is required for production deployments",
-  );
+resolvePasskeyDeploymentConfig({
+  deploymentTier: process.env.NEXT_PUBLIC_DEPLOYMENT_TIER,
+  appId: process.env.NEXT_PUBLIC_PASSKEY_APP_ID,
+});
 
 const contentSecurityPolicy = [
   "default-src 'self'",

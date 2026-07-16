@@ -142,7 +142,7 @@ The first update wins the idempotency race. Later confirmation, amendment, VAR, 
 
 **Research.** The hackathon requires a deployed consumer product but the official terms also prohibit redistribution, publication, sharing, or making TxODDS Data available and terminate the hackathon data licence at the hackathon's conclusion. This conflict required sponsor clarification. See the [hackathon terms](https://txline.txodds.com/documentation/legal/hackathon-terms) and [`hackathon.md`](./hackathon.md).
 
-**Suggested answer adopted.** Keep all TxLINE credentials and raw payloads in the trusted backend. Expose only minimal derived match identity, phase, score, and GoalDrop state needed by the experience. Use synthetic TxLINE-shaped demo events, not recorded public replay, unless the confirmed permission expressly covers replay. Keep `TXLINE_PUBLIC_OUTPUT_ENABLED` and `TXLINE_RAW_RETENTION_ENABLED` kill switches and a post-hackathon shutdown runbook. The requester confirmed the required permission is resolved for the Devnet MVP; retain only secret-redacted evidence of that disposition.
+**Suggested answer adopted.** Keep all TxLINE credentials and raw payloads in the trusted backend. Expose only minimal derived match identity, phase, score, and GoalDrop state needed by the experience. Use synthetic TxLINE-shaped demo events, not recorded public replay, unless the confirmed permission expressly covers replay. Keep independent `TXLINE_LISTENER_ENABLED`, `TXLINE_PUBLIC_OUTPUT_ENABLED`, and `TXLINE_RAW_RETENTION_ENABLED` kill switches and a post-hackathon shutdown runbook. The requester confirmed the required permission is resolved for the Devnet MVP; retain only secret-redacted evidence of that disposition.
 
 ### Q8. How can a judge test without buying tokens or establishing an external wallet?
 
@@ -275,11 +275,13 @@ flowchart TB
     PG --> API2
 
     Secrets["Deployment secret store"] --> T
+    Secrets --> API1
+    Secrets --> API2
     Secrets --> O
     Secrets --> S
     Secrets --> D
     T --> TX["TxLINE Devnet"]
-    O --> Sol["Managed Solana Devnet RPC"]
+    O --> Sol["Solana Foundation public Devnet RPC"]
     S --> Sol
     I --> Sol
     D --> Sol
@@ -307,6 +309,7 @@ Do not run the TxLINE listener or settlement worker in request-scoped serverless
 - [ ] Deployment manifests create separate process roles for public API/SSE, TxLINE listener, oracle, settlement, indexer, and demo controller from the shared service image.
 - [ ] Restarting or scaling an API instance does not reset TxLINE cursors, round sequences, settlement status, or public event replay.
 - [ ] Only the TxLINE listener holds TxLINE credentials; only the process role needing an authority receives that authority's secret.
+- [ ] Public ingress exposes only the versioned public API/SSE routes; `/internal/health` and `/internal/metrics` remain reachable only from the hosting platform and observability network.
 - [ ] API and PostgreSQL are deployed in one measured region, and the 500-request load test runs against that actual topology.
 - [ ] Long-lived TxLINE and Solana WebSocket connections survive the hosting platform's idle limits or reconnect through the documented recovery path.
 - [ ] The web deployment, service deployment, database migration, and worker commands are reproducible from version-controlled configuration with no manual secret copying.
@@ -1266,7 +1269,7 @@ GoalDrop does not need fan names, email addresses, social accounts, biometrics, 
 | Analytics | First-party, consent-aware, no raw passkey data, no secret-bearing URLs. |
 | Public event stream | Derived GoalDrop state only; no raw provider record or credentials. |
 
-Before the hackathon licence ends, either obtain a continuing licence or set `TXLINE_PUBLIC_OUTPUT_ENABLED=false`, stop the listener, revoke/delete API credentials, remove retained provider data as required, and leave only a static explanation or fully synthetic demo if permitted.
+Before the hackathon licence ends, either obtain a continuing licence or set `TXLINE_LISTENER_ENABLED=false` and `TXLINE_PUBLIC_OUTPUT_ENABLED=false`, remove the listener credentials from its process, revoke/delete the provider credentials, remove retained provider data as required, and leave only a static explanation or fully synthetic demo if permitted.
 
 ### 14.1 Acceptance criteria
 
@@ -1274,7 +1277,7 @@ Before the hackathon licence ends, either obtain a continuing licence or set `TX
 - [ ] Raw TxLINE payload retention is encrypted, access-logged, disabled by default without approval, and automatically deletes records older than 24 hours.
 - [ ] Browser/API/log inspection finds no guest JWT, API token, subscription key, raw provider payload, biometric/passkey material, or persistent plaintext device fingerprint.
 - [ ] The public privacy notice describes wallet-address processing, analytics/cookies, passkey-provider responsibility, retention, and the public nature of Solana transactions.
-- [ ] `TXLINE_PUBLIC_OUTPUT_ENABLED=false` stops derived live output without preventing on-chain round closure, timeout finalization, or refund.
+- [ ] `TXLINE_LISTENER_ENABLED=false` starts without provider credentials, makes no TxLINE request, and reports live feed degraded; `TXLINE_PUBLIC_OUTPUT_ENABLED=false` independently suppresses derived live output. Neither switch prevents on-chain round closure, timeout finalization, or refund.
 - [ ] A dated post-hackathon runbook proves credential revocation, listener shutdown, required provider-data deletion, and the permitted remaining demo state.
 
 ## 15. Performance and capacity
@@ -1307,7 +1310,7 @@ up to 8 configured and concurrently addressable rounds
 - Listener/oracle commands use campaign advisory locks.
 - Settlement uses a round advisory lock and a bounded transaction pipeline; horizontal workers can process different rounds.
 - Public SSE instances consume the application outbox/notification stream and use database replay after disconnect.
-- Use a managed RPC with WebSocket support and explicit rate limits; public Devnet RPC is a fallback, not the load-test target.
+- Use the requester-selected Solana Foundation public Devnet HTTP/WebSocket endpoints for the MVP. Pace writes, avoid broad scans, keep configured-account fallbacks, and separate archival evidence reads from latency measurements; promotion beyond this envelope requires a managed endpoint with explicit capacity.
 - Simulate each transaction shape during development, measure compute, then set CU limit to measured usage plus a small margin. Do not pay for an arbitrary maximum.
 
 The acceptance burst is decoupled from chain settlement. HTTP success means receipt acceptance, not payout. The settlement queue must nevertheless drain all possible winners before the on-chain deadline; alert when projected drain time exceeds 60 seconds.
@@ -1343,7 +1346,7 @@ The acceptance burst is decoupled from chain settlement. HTTP success means rece
 | Devnet fork/reorg | confirmed/finalized divergence | Reconcile account state; distinguish confirmed from finalized in audit while keeping user messaging clear. |
 | Passkey unavailable/lost | provider error | Offer external wallet or Instant Demo; show provider recovery/export guidance without promising unsupported recovery. |
 | Match postponed/abandoned | provider state/hard timeout | No rescheduling in MVP; terminal oracle event or eight-hour timeout allows refund after rounds close. |
-| Public data rights revoked | operator flag | Disable derived live output and listener without affecting permissionless chain close/refund. |
+| Public data rights revoked | `TXLINE_LISTENER_ENABLED` / `TXLINE_PUBLIC_OUTPUT_ENABLED` | Start the disabled listener role without credentials or network calls, suppress derived live output, report `live_feed` degraded, and preserve permissionless chain close/refund. |
 
 ### 16.1 Acceptance criteria
 
@@ -1515,8 +1518,8 @@ Run the exact judge seam on the deployed system:
 
 ```text
 SOLANA_CLUSTER=devnet
-SOLANA_HTTP_RPC_URL=<managed-devnet-rpc>
-SOLANA_WS_RPC_URL=<managed-devnet-ws>
+SOLANA_HTTP_RPC_URL=https://api.devnet.solana.com
+SOLANA_WS_RPC_URL=wss://api.devnet.solana.com
 PUBLIC_ORIGIN=<exact-public-web-origin>
 TRUST_PROXY_HOPS=<0-direct-or-known-ingress-hop-count>
 DATABASE_POOL_SIZE=20
@@ -1529,10 +1532,11 @@ TXLINE_SERVICE_LEVEL=1
 ROUND_DURATION_SECONDS=120
 LIVE_EVENT_MAX_LATENESS_SECONDS=60
 DEFAULT_HARD_EXPIRY_SECONDS=28800
+TXLINE_LISTENER_ENABLED=true|false
 TXLINE_PUBLIC_OUTPUT_ENABLED=true|false
 TXLINE_RAW_RETENTION_ENABLED=true|false
 DEMO_MODE_ENABLED=true
-FEE_PAYER_MIN_LAMPORTS=10000000000
+FEE_PAYER_MIN_LAMPORTS=500000000
 ```
 
 The service refuses to start if cluster, GoalDrop program, TxLINE host/program/mint, or configured on-chain PlatformConfig disagree. `TRUST_PROXY_HOPS` remains zero for direct exposure and is set only to the known number of controlled ingress hops; this preserves per-client admission limits without trusting arbitrary forwarded addresses. The API stops accepting new sponsored work below `FEE_PAYER_MIN_LAMPORTS`, but duplicate requests already in the durable log remain readable and idempotent.
@@ -1711,7 +1715,7 @@ No UI-heavy work should outrun these gates.
 
 ## 23. Release-blocker ledger
 
-These do not prevent architecture definition, but any open item blocks claiming the deployed MVP is complete. The machine-readable current status and evidence live in `docs/release-blockers.json`; as of July 16, 2026, RB-1, RB-2, RB-4, RB-5, RB-6, RB-7, and RB-8 are resolved, while RB-3 remains open:
+These do not prevent architecture definition, but any open item blocks claiming the deployed MVP is complete. The machine-readable current status and evidence live in `docs/release-blockers.json`; as of July 16, 2026, RB-1, RB-2, RB-4, RB-5, RB-6, RB-7, and RB-8 are resolved, while RB-3 and RB-9 remain open:
 
 1. **TxODDS written permission (resolved):** the requester confirmed the public derived-display, caching/retention, and synthetic-vs-recorded demo disposition is solved; only secret-redacted evidence may be retained in the repository.
 2. **Live schema validation (resolved):** authenticated PascalCase goal, status, confirmation, correction/VAR, and finalization records parse with zero failures in the recorded private validation window.
@@ -1721,11 +1725,12 @@ These do not prevent architecture definition, but any open item blocks claiming 
 6. **Timeout approval (resolved):** the requester authorized documented assumptions, so kickoff plus eight hours and refund-on-postponement are adopted for the Devnet MVP.
 7. **Demo-token policy (resolved):** the published classic SPL mint is six-decimal, valueless, has no freeze authority, and has a wallet-signed one-use 500-GOAL faucet.
 8. **Judge Quickstart security review (resolved):** the Instant Demo signer is memory-only, disappears on reload/disconnect, and repository checks reject browser private-key persistence.
+9. **Public application runtime (open):** deploy immutable web/service images plus PostgreSQL behind HTTPS, run all required roles, restrict internal health/metrics at ingress, and archive public URL, health, clean-browser, rollback, target-topology load/SSE/latency, and image/migration evidence.
 
 ### 23.1 Acceptance criteria
 
 - [ ] Each blocker has a delivery-tracker owner, due date, required evidence, current status, and explicit release impact.
-- [ ] Blockers 1–8 are resolved with linked evidence or converted into a written product/architecture decision approved by the accountable owner before public release.
+- [ ] Blockers 1–9 are resolved with linked evidence or converted into a written product/architecture decision approved by the accountable owner before public release.
 - [ ] TxODDS permission and live-schema evidence are retained in a shareable, secret-redacted form and reflected in configuration/adapter tests.
 - [ ] Passkey and transaction benchmarks run against the exact dependency versions, browsers, program binary, RPC, and deployment topology selected for judging.
 - [ ] Demo-token and Instant Demo reviews confirm conspicuous Devnet labeling, no represented value, no recoverability promise, and no authority escape.

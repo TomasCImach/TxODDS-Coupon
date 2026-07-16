@@ -31,6 +31,7 @@ import {
   TransactionInstruction,
   VersionedTransaction,
 } from "@solana/web3.js";
+import bs58 from "bs58";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireWriteOrigin } from "../origin.js";
@@ -710,9 +711,90 @@ async function submitTemplate(
       );
       return submittedTemplate(row, true);
     }
-    throw new Error(
-      `transaction submission is still ambiguous: ${row.transaction_signature}`,
+    const lastValidBlockHeight = Number(row.metadata.lastValidBlockHeight);
+    if (
+      row.expires_at.getTime() <= Date.now() ||
+      (Number.isSafeInteger(lastValidBlockHeight) &&
+        (await connection.getBlockHeight("confirmed")) > lastValidBlockHeight)
+    ) {
+      await deps.pool.query(
+        `UPDATE sponsored_transaction_templates SET status = 'expired',
+                error_detail = 'transaction blockhash expired before confirmation',
+                updated_at = clock_timestamp() WHERE id = $1`,
+        [row.id],
+      );
+      throw new Error("transaction template expired before confirmation");
+    }
+    const feePayer = keypairFromConfig(
+      deps.config.FEE_PAYER_KEYPAIR,
+      "FEE_PAYER_KEYPAIR",
     );
+    if (!feePayer.publicKey.equals(new PublicKey(row.fee_payer)))
+      throw new Error("template fee payer is no longer active");
+    let transaction: VersionedTransaction;
+    try {
+      transaction = deserializeSponsoredTransaction(
+        Buffer.from(input.signedTransaction, "base64"),
+      );
+    } catch {
+      throw new Error("signed transaction is malformed");
+    }
+    validateSignedTemplate(transaction, {
+      feePayer: feePayer.publicKey,
+      allowedProgramIds: row.allowed_program_ids.map(
+        (program) => new PublicKey(program),
+      ),
+      ...(row.actor ? { requiredSigner: new PublicKey(row.actor) } : {}),
+      templateMessageBytes: row.message_bytes,
+      expiresAt: row.expires_at,
+    });
+    transaction.sign([feePayer]);
+    const expectedSignature = bs58.encode(transaction.signatures[0]!);
+    if (expectedSignature !== row.transaction_signature)
+      throw new Error("signed retry does not match the recorded transaction");
+    try {
+      const resent = await connection.sendRawTransaction(
+        transaction.serialize(),
+        {
+          maxRetries: 2,
+          skipPreflight: true,
+        },
+      );
+      if (resent !== expectedSignature)
+        throw new Error("RPC returned an unexpected transaction signature");
+      const confirmation = await connection.confirmTransaction(
+        {
+          signature: expectedSignature,
+          blockhash: String(row.metadata.blockhash),
+          lastValidBlockHeight,
+        },
+        "confirmed",
+      );
+      if (confirmation.value.err) {
+        await deps.pool.query(
+          `UPDATE sponsored_transaction_templates SET status = 'failed', error_detail = $2,
+                  updated_at = clock_timestamp() WHERE id = $1`,
+          [row.id, JSON.stringify(confirmation.value.err).slice(0, 500)],
+        );
+        throw new Error("retried transaction failed on chain");
+      }
+      await deps.pool.query(
+        `UPDATE sponsored_transaction_templates SET status = 'submitted', submitted_at = COALESCE(submitted_at, clock_timestamp()),
+                error_detail = NULL, updated_at = clock_timestamp() WHERE id = $1`,
+        [row.id],
+      );
+      await reconcileRefundProjection(deps, connection, row).catch(
+        () => undefined,
+      );
+      return submittedTemplate(row, true);
+    } catch (error) {
+      if (/failed on chain/i.test(error instanceof Error ? error.message : ""))
+        throw error;
+      throw new Error(
+        `transaction submission is still ambiguous: ${row.transaction_signature}`,
+        { cause: error },
+      );
+    }
   }
   if (row.status !== "built")
     throw new Error(`transaction template is ${row.status}`);
@@ -749,6 +831,7 @@ async function submitTemplate(
   transaction.sign([feePayer]);
   let sendAttempted = false;
   let submittedSignature: string | null = null;
+  let confirmedFailure = false;
   try {
     const simulation = await connection.simulateTransaction(transaction, {
       commitment: "confirmed",
@@ -758,12 +841,19 @@ async function submitTemplate(
       throw new Error(
         `transaction simulation failed: ${JSON.stringify(simulation.value.err)}`,
       );
+    submittedSignature = bs58.encode(transaction.signatures[0]!);
+    await deps.pool.query(
+      `UPDATE sponsored_transaction_templates SET transaction_signature = $2,
+              updated_at = clock_timestamp() WHERE id = $1`,
+      [row.id, submittedSignature],
+    );
     sendAttempted = true;
     const signature = await connection.sendRawTransaction(
       transaction.serialize(),
       { maxRetries: 2, skipPreflight: true },
     );
-    submittedSignature = signature;
+    if (signature !== submittedSignature)
+      throw new Error("RPC returned an unexpected transaction signature");
     await deps.pool.query(
       `UPDATE sponsored_transaction_templates SET transaction_signature = $2,
               submitted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = $1`,
@@ -775,10 +865,12 @@ async function submitTemplate(
       { signature, blockhash, lastValidBlockHeight },
       "confirmed",
     );
-    if (confirmation.value.err)
+    if (confirmation.value.err) {
+      confirmedFailure = true;
       throw new Error(
         `transaction failed: ${JSON.stringify(confirmation.value.err)}`,
       );
+    }
     await deps.pool.query(
       `UPDATE sponsored_transaction_templates SET status = 'submitted', transaction_signature = $2,
               submitted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = $1`,
@@ -802,7 +894,7 @@ async function submitTemplate(
               error_detail = left($4,500), updated_at = clock_timestamp() WHERE id = $1`,
       [
         row.id,
-        sendAttempted ? "ambiguous" : "failed",
+        confirmedFailure ? "failed" : sendAttempted ? "ambiguous" : "failed",
         submittedSignature,
         error instanceof Error ? error.message : "submission failed",
       ],

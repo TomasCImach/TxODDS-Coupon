@@ -52,6 +52,7 @@ import {
   roundPda,
   setPauseMaskInstruction,
   settleClaimInstruction,
+  skipSequenceInstruction,
   sponsorCampaignInstruction,
   vaultPda,
 } from "@goaldrop/solana-client";
@@ -61,14 +62,23 @@ import { describe, expect, it } from "vitest";
 const validatorUrl = process.env.ANCHOR_PROVIDER_URL;
 const anchorWallet = process.env.ANCHOR_WALLET;
 const validator = validatorUrl && anchorWallet ? describe : describe.skip;
+const GOALDROP_PROGRAM_ID = new PublicKey(
+  "2NUW8WnPJpsSruWhQ5as8AeynBDdfhth5YBXpFWfxZnc",
+);
 
 validator("GoalDrop local-validator economic path", () => {
   it("settles overlapping rounds and refunds after provider or hard-timeout finalization", async () => {
     const connection = new Connection(validatorUrl!, "confirmed");
     const feePayer = keypairFromFile(anchorWallet!);
-    const programId = keypairFromFile(
-      "target/deploy/goaldrop-keypair.json",
-    ).publicKey;
+    const programId = GOALDROP_PROGRAM_ID;
+    const programAccount = await connection.getAccountInfo(
+      programId,
+      "confirmed",
+    );
+    if (!programAccount?.executable)
+      throw new Error(
+        `GoalDrop program ${programId.toBase58()} is not deployed in the test validator`,
+      );
     const oracle = Keypair.generate();
     const relayer = Keypair.generate();
     const demoAuthority = Keypair.generate();
@@ -786,6 +796,38 @@ validator("GoalDrop local-validator economic path", () => {
       fan.secretKey,
     );
     const [secondClaim] = claimPda(programId, nextRound, fan.publicKey);
+    const skippedIntent = new Uint8Array(32).fill(31);
+    await expect(
+      send(
+        connection,
+        feePayer,
+        [
+          skipSequenceInstruction(
+            programId,
+            {
+              config,
+              campaign,
+              round: nextRound,
+              relayer: capFan.publicKey,
+            },
+            { sequence: 1n, intentHash: skippedIntent, reason: 1 },
+          ),
+        ],
+        [capFan],
+      ),
+    ).rejects.toThrow();
+    await send(
+      connection,
+      feePayer,
+      [
+        skipSequenceInstruction(
+          programId,
+          { config, campaign, round: nextRound, relayer: relayer.publicKey },
+          { sequence: 1n, intentHash: skippedIntent, reason: 1 },
+        ),
+      ],
+      [relayer],
+    );
     await send(
       connection,
       feePayer,
@@ -811,7 +853,7 @@ validator("GoalDrop local-validator economic path", () => {
             recipientToken: recipientToken.address,
           },
           {
-            sequence: 1n,
+            sequence: 2n,
             nonce: secondClaimNonce,
             expiresAt: claimExpiry,
             intentHash: secondClaimIntent,
@@ -829,6 +871,8 @@ validator("GoalDrop local-validator economic path", () => {
       (await requiredAccount(connection, nextRound)).data,
     );
     expect(secondRoundState.state).toBe(RoundState.Exhausted);
+    expect(secondRoundState.skippedCount).toBe(1);
+    expect(secondRoundState.nextSequence).toBe(3n);
     expect((await getAccount(connection, recipientToken.address)).amount).toBe(
       2_000n,
     );

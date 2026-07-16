@@ -27,6 +27,7 @@ import { createWallet } from "@passkeys/core";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import { track } from "../lib/analytics";
+import { resolvePasskeyDeploymentConfig } from "../lib/deployment-config";
 
 type EmbeddedWallet = ReturnType<typeof createWallet>;
 type WalletMode = "passkey" | "external" | "instant-demo" | null;
@@ -52,12 +53,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
     null,
   );
   useEffect(() => {
-    const appId = process.env.NEXT_PUBLIC_PASSKEY_APP_ID;
-    const deploymentTier = process.env.NEXT_PUBLIC_DEPLOYMENT_TIER ?? "devnet";
-    if (deploymentTier === "production" && !appId)
-      throw new Error(
-        "NEXT_PUBLIC_PASSKEY_APP_ID is required for production deployments",
-      );
+    const { appId } = resolvePasskeyDeploymentConfig({
+      deploymentTier: process.env.NEXT_PUBLIC_DEPLOYMENT_TIER,
+      appId: process.env.NEXT_PUBLIC_PASSKEY_APP_ID,
+    });
     const frame = requestAnimationFrame(() => {
       setEmbeddedWallet(
         createWallet({

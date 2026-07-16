@@ -50,8 +50,13 @@ async function main(role: ServiceRole): Promise<void> {
       await untilAborted(abort.signal);
       return;
     }
-    if (role === "txline-listener")
+    if (role === "txline-listener") {
+      logger.info(
+        { role, listenerEnabled: config.TXLINE_LISTENER_ENABLED },
+        "worker ready",
+      );
       await runTxlineSupervisor(config, pool, logger, abort.signal);
+    }
     if (role === "oracle-worker") {
       const authority = keypairFromConfig(
         config.ORACLE_KEYPAIR,
@@ -59,6 +64,10 @@ async function main(role: ServiceRole): Promise<void> {
       );
       if (!authority.publicKey.equals(onchain.oracle))
         throw new Error("ORACLE_KEYPAIR does not match PlatformConfig.oracle");
+      logger.info(
+        { role, authority: authority.publicKey.toBase58() },
+        "worker ready",
+      );
       await runOracleWorker(config, pool, logger, abort.signal);
     }
     if (role === "settlement-worker") {
@@ -70,10 +79,19 @@ async function main(role: ServiceRole): Promise<void> {
         throw new Error(
           "RELAYER_KEYPAIR does not match PlatformConfig.relayer",
         );
+      logger.info(
+        { role, authority: authority.publicKey.toBase58() },
+        "worker ready",
+      );
       await runSettlementWorker(config, pool, logger, abort.signal);
     }
-    if (role === "chain-indexer")
+    if (role === "chain-indexer") {
+      logger.info(
+        { role, program: config.GOALDROP_PROGRAM_ID },
+        "worker ready",
+      );
       await runChainIndexer(config, pool, logger, abort.signal);
+    }
     if (role === "demo-controller") {
       const authority = keypairFromConfig(
         config.DEMO_AUTHORITY_KEYPAIR,
@@ -83,6 +101,10 @@ async function main(role: ServiceRole): Promise<void> {
         throw new Error(
           "DEMO_AUTHORITY_KEYPAIR does not match PlatformConfig.demo_authority",
         );
+      logger.info(
+        { role, authority: authority.publicKey.toBase58() },
+        "worker ready",
+      );
       await runDemoController(config, pool, logger, abort.signal);
     }
   } finally {

@@ -1,6 +1,6 @@
 # Exact remaining unblock checklist
 
-As of July 16, 2026, GoalDrop's program, Devnet campaign, authenticated TxLINE adapter and permission disposition, public-RPC decision and 100/100 claim benchmark, timeout policy, valueless demo-token faucet, and memory-only Instant Demo containment are complete. `pnpm release:check` reports only RB-3.
+As of July 16, 2026, GoalDrop's program, Devnet campaign, authenticated TxLINE adapter and permission disposition, public-RPC decision and 100/100 claim benchmark, timeout policy, valueless demo-token faucet, and memory-only Instant Demo containment are complete. `pnpm release:check` reports RB-3 and RB-9.
 
 ## 1. Complete the production Passkeys device matrix (RB-3)
 
@@ -15,6 +15,6 @@ As of July 16, 2026, GoalDrop's program, Devnet campaign, authenticated TxLINE a
    - disconnect/reconnect and the judge Quickstart.
 4. Record browser/OS/SDK versions, public wallet address, public Devnet signatures, and outcomes only. Never capture biometrics, passkey credentials, seed/private keys, or session tokens.
 
-## 2. Choose the public application runtime
+## 2. Choose and validate the public application runtime (RB-9)
 
-The program is public on Devnet, but the verified web/service containers still need a public HTTPS runtime and PostgreSQL instance. Provide the target (for example, an existing container host plus registry/database credentials) or authorize setup on a named provider. Deployment must use secret storage, run migrations once, publish the API/web/settlement/lifecycle/oracle/TxLINE/demo roles within the confirmed permission, and record immutable image digests and the public URL before submission.
+The program is public on Devnet, but the verified web/service containers still need a public HTTPS runtime and PostgreSQL instance. Provide the target (for example, an existing container host plus registry/database credentials) or authorize setup on a named provider. Deployment must use secret storage, run migrations once, publish the API/web/settlement/lifecycle/oracle/TxLINE/demo roles within the confirmed permission, restrict `/internal/health` and `/internal/metrics` to the platform/observability network, and record immutable image digests and the public URL before submission. Resolution also requires clean-browser acceptance, rollback rehearsal, and the architecture §15 target-topology load/SSE/latency report; a local Compose pass alone is insufficient.

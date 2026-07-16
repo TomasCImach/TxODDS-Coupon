@@ -62,6 +62,7 @@ const schema = z.object({
     .min(300)
     .max(86_400)
     .default(28_800),
+  TXLINE_LISTENER_ENABLED: booleanString.default(true),
   TXLINE_PUBLIC_OUTPUT_ENABLED: booleanString.default(false),
   TXLINE_RAW_RETENTION_ENABLED: booleanString.default(false),
   DEMO_MODE_ENABLED: booleanString.default(true),
@@ -98,7 +99,6 @@ export function loadConfig(
     Record<ServiceRole, readonly (keyof typeof config)[]>
   > = {
     api: ["RELAYER_KEYPAIR", "RECEIPT_CAPABILITY_KEY", "FEE_PAYER_KEYPAIR"],
-    "txline-listener": ["TXLINE_GUEST_JWT", "TXLINE_API_TOKEN"],
     "oracle-worker": ["ORACLE_KEYPAIR", "FEE_PAYER_KEYPAIR"],
     "settlement-worker": ["RELAYER_KEYPAIR", "FEE_PAYER_KEYPAIR"],
     "demo-controller": [
@@ -107,6 +107,9 @@ export function loadConfig(
       "DEMO_CAMPAIGN",
     ],
   };
+  if (role === "txline-listener" && config.TXLINE_LISTENER_ENABLED) {
+    required[role] = ["TXLINE_GUEST_JWT", "TXLINE_API_TOKEN"];
+  }
   for (const key of required[role] ?? []) {
     if (!config[key]) throw new Error(`${String(key)} is required for ${role}`);
   }

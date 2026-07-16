@@ -108,6 +108,41 @@ export function decodeCampaignAccount(data: Buffer): CampaignAccount {
   };
 }
 
+export interface GoalReceiptAccount {
+  version: number;
+  bump: number;
+  source: number;
+  roundOrdinal: number;
+  campaign: PublicKey;
+  eventHash: Uint8Array;
+  providerActionId: bigint;
+  providerSeq: number;
+  providerStatus: number;
+  confirmedAtOpen: boolean;
+  providerTsMs: bigint;
+  openedAt: bigint;
+  rawDigest: Uint8Array;
+}
+
+export function decodeGoalReceiptAccount(data: Buffer): GoalReceiptAccount {
+  expectLength(data, 168, "GoalReceipt");
+  return {
+    version: data[8] ?? 0,
+    bump: data[9] ?? 0,
+    source: data[10] ?? RoundSource.Live,
+    roundOrdinal: data[11] ?? 0,
+    campaign: new PublicKey(data.subarray(12, 44)),
+    eventHash: new Uint8Array(data.subarray(44, 76)),
+    providerActionId: data.readBigUInt64LE(76),
+    providerSeq: data.readUInt32LE(84),
+    providerStatus: data.readUInt16LE(88),
+    confirmedAtOpen: data[90] === 1,
+    providerTsMs: data.readBigInt64LE(92),
+    openedAt: data.readBigInt64LE(100),
+    rawDigest: new Uint8Array(data.subarray(108, 140)),
+  };
+}
+
 export interface RegistrationAccount {
   version: number;
   bump: number;

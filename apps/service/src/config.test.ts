@@ -43,4 +43,16 @@ describe("service role configuration", () => {
       "RELAYER_KEYPAIR is required for api",
     );
   });
+
+  it("starts a deliberately disabled listener without provider credentials", () => {
+    const environment = apiEnvironment();
+    environment.TXLINE_LISTENER_ENABLED = "false";
+    expect(
+      loadConfig("txline-listener", environment).TXLINE_LISTENER_ENABLED,
+    ).toBe(false);
+    environment.TXLINE_LISTENER_ENABLED = "true";
+    expect(() => loadConfig("txline-listener", environment)).toThrow(
+      "TXLINE_GUEST_JWT is required for txline-listener",
+    );
+  });
 });

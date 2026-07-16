@@ -2,16 +2,22 @@ import { randomUUID } from "node:crypto";
 import type { DatabasePool } from "@goaldrop/db";
 import {
   buildSponsoredV0Transaction,
+  decodeGoalReceiptAccount,
+  type CampaignAccount,
   type ComputeBudget,
 } from "@goaldrop/solana-client";
 import {
   Connection,
   Keypair,
+  type AccountInfo,
   type PublicKey,
   type TransactionInstruction,
   type VersionedTransactionResponse,
 } from "@solana/web3.js";
+import bs58 from "bs58";
 import { decodeSecretBytes, type ServiceConfig } from "../config.js";
+
+class ConfirmedTransactionFailure extends Error {}
 
 export function connectionFor(config: ServiceConfig): Connection {
   return new Connection(config.SOLANA_HTTP_RPC_URL, {
@@ -26,6 +32,31 @@ export function keypairFromConfig(
   name: string,
 ): Keypair {
   return Keypair.fromSecretKey(decodeSecretBytes(value ?? "", 64, name));
+}
+
+export function resolveGoalRound(input: {
+  programId: PublicKey;
+  campaignAddress: PublicKey;
+  campaign: CampaignAccount;
+  eventHash: Uint8Array;
+  expectedSource: number;
+  receiptInfo: AccountInfo<Buffer> | null;
+}): { ordinal: number; alreadyOpened: boolean } | null {
+  if (!input.receiptInfo) {
+    if (input.campaign.nextRound >= input.campaign.roundCount) return null;
+    return { ordinal: input.campaign.nextRound, alreadyOpened: false };
+  }
+  if (!input.receiptInfo.owner.equals(input.programId))
+    throw new Error("goal receipt has wrong owner");
+  const receipt = decodeGoalReceiptAccount(input.receiptInfo.data);
+  if (
+    !receipt.campaign.equals(input.campaignAddress) ||
+    !Buffer.from(receipt.eventHash).equals(Buffer.from(input.eventHash)) ||
+    receipt.source !== input.expectedSource ||
+    receipt.roundOrdinal >= input.campaign.roundCount
+  )
+    throw new Error("goal receipt does not match the requested round");
+  return { ordinal: receipt.roundOrdinal, alreadyOpened: true };
 }
 
 export async function sendWorkerTransaction(input: {
@@ -54,6 +85,7 @@ export async function sendWorkerTransaction(input: {
       ? [input.feePayer, input.authority]
       : [input.feePayer];
   transaction.sign(signers);
+  const expectedSignature = bs58.encode(transaction.signatures[0]!);
   const simulated = await input.connection.simulateTransaction(transaction, {
     commitment: "confirmed",
     sigVerify: true,
@@ -64,11 +96,12 @@ export async function sendWorkerTransaction(input: {
     );
   const record = await input.pool.query<{ id: string }>(
     `INSERT INTO chain_transactions (
-       purpose, aggregate_key, blockhash, last_valid_block_height, accounts, status, trace_id
-     ) VALUES ($1,$2,$3,$4,$5::jsonb,'built',$6) RETURNING id::text`,
+       purpose, aggregate_key, signature, blockhash, last_valid_block_height, accounts, status, trace_id
+     ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,'built',$7) RETURNING id::text`,
     [
       input.purpose,
       input.aggregateKey,
+      expectedSignature,
       blockhash.blockhash,
       blockhash.lastValidBlockHeight,
       JSON.stringify(accountKeys(input.instructions)),
@@ -81,16 +114,18 @@ export async function sendWorkerTransaction(input: {
       transaction.serialize(),
       { maxRetries: 0, skipPreflight: true },
     );
+    if (signature !== expectedSignature)
+      throw new Error("RPC returned an unexpected transaction signature");
     await input.pool.query(
-      "UPDATE chain_transactions SET signature = $2, status = 'submitted', submitted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = $1",
-      [id, signature],
+      "UPDATE chain_transactions SET status = 'submitted', submitted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = $1",
+      [id],
     );
     const confirmation = await input.connection.confirmTransaction(
       { signature, ...blockhash },
       "confirmed",
     );
     if (confirmation.value.err)
-      throw new Error(
+      throw new ConfirmedTransactionFailure(
         `transaction ${signature} failed: ${JSON.stringify(confirmation.value.err)}`,
       );
     await input.pool.query(
@@ -99,9 +134,15 @@ export async function sendWorkerTransaction(input: {
     );
     return { signature, slot: confirmation.context.slot };
   } catch (error) {
+    const status =
+      error instanceof ConfirmedTransactionFailure ? "failed" : "ambiguous";
     await input.pool.query(
-      "UPDATE chain_transactions SET status = 'ambiguous', error_detail = left($2,500), updated_at = clock_timestamp() WHERE id = $1",
-      [id, error instanceof Error ? error.message : "unknown submission error"],
+      "UPDATE chain_transactions SET status = $2, error_detail = left($3,500), updated_at = clock_timestamp() WHERE id = $1",
+      [
+        id,
+        status,
+        error instanceof Error ? error.message : "unknown submission error",
+      ],
     );
     throw error;
   }

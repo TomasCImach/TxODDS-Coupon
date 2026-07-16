@@ -74,6 +74,84 @@ for (const file of browserSources) {
   }
 }
 
+const composeSource = readFileSync("compose.app.yaml", "utf8");
+if (/^\s*env_file:/m.test(composeSource))
+  findings.push(
+    "compose.app.yaml: shared env_file injection violates role-scoped secrets",
+  );
+const serviceSecretScopes = {
+  api: ["RELAYER_KEYPAIR", "RECEIPT_CAPABILITY_KEY", "FEE_PAYER_KEYPAIR"],
+  "txline-listener": [
+    "TXLINE_GUEST_JWT",
+    "TXLINE_API_TOKEN",
+    "TXLINE_RAW_ENCRYPTION_KEY",
+  ],
+  "oracle-worker": ["ORACLE_KEYPAIR", "FEE_PAYER_KEYPAIR"],
+  "settlement-worker": ["RELAYER_KEYPAIR", "FEE_PAYER_KEYPAIR"],
+  "chain-indexer": [],
+  "demo-controller": ["DEMO_AUTHORITY_KEYPAIR", "FEE_PAYER_KEYPAIR"],
+  web: [],
+};
+const scopedSecrets = new Set(Object.values(serviceSecretScopes).flat());
+const commonServiceBlock = composeSource.slice(
+  0,
+  composeSource.indexOf("\nservices:\n"),
+);
+for (const secret of scopedSecrets) {
+  if (commonServiceBlock.includes(`${secret}:`))
+    findings.push(
+      `compose.app.yaml: ${secret} must not be injected through the shared service environment`,
+    );
+}
+for (const [service, allowedSecrets] of Object.entries(serviceSecretScopes)) {
+  const marker = `\n  ${service}:\n`;
+  const start = composeSource.indexOf(marker);
+  const tail = start < 0 ? "" : composeSource.slice(start + marker.length);
+  const nextService = tail.search(/\n  [a-z][a-z0-9-]*:\n/);
+  const block = nextService < 0 ? tail : tail.slice(0, nextService);
+  if (start < 0) {
+    findings.push(`compose.app.yaml: missing ${service} service`);
+    continue;
+  }
+  for (const secret of scopedSecrets) {
+    const present = block.includes(`${secret}:`);
+    const expected = allowedSecrets.includes(secret);
+    if (present !== expected)
+      findings.push(
+        `compose.app.yaml: ${service} ${present ? "must not receive" : "must receive"} ${secret}`,
+      );
+  }
+}
+
+for (const dockerfile of ["apps/service/Dockerfile", "apps/web/Dockerfile"]) {
+  const source = readFileSync(dockerfile, "utf8");
+  const nodeBases = source.match(/^FROM\s+node:[^\s]+/gm) ?? [];
+  if (
+    nodeBases.length !== 2 ||
+    nodeBases.some((base) => !/@sha256:[a-f0-9]{64}$/.test(base))
+  )
+    findings.push(
+      `${dockerfile}: builder and runtime Node images must use immutable SHA-256 digests`,
+    );
+}
+
+const workflowSource = readFileSync(".github/workflows/verify.yml", "utf8");
+for (const action of workflowSource.matchAll(/^\s*- uses:\s+([^\s#]+)/gm)) {
+  if (!/@[a-f0-9]{40}$/.test(action[1] ?? ""))
+    findings.push(
+      `.github/workflows/verify.yml: action ${action[1]} must be pinned to a full commit SHA`,
+    );
+}
+for (const digest of [
+  "5f25b850ce80278507a98947833fcd48423391f6d145046ffb0c5fd130dec436",
+  "56241fbe862495ff01b2b875195e44f94c22e9f2a504591a3ade1b9d82862730",
+]) {
+  if (!workflowSource.includes(digest))
+    findings.push(
+      ".github/workflows/verify.yml: pinned Anchor/Agave download checksum is missing",
+    );
+}
+
 if (findings.length) {
   process.stderr.write(
     `Repository security audit failed:\n${findings.join("\n")}\n`,

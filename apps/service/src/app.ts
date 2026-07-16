@@ -123,7 +123,8 @@ export async function createApp(
         (SELECT count(*) FROM outbox WHERE published_at IS NULL AND dead_lettered_at IS NULL)::text AS pending_outbox,
         (SELECT count(*) FROM outbox WHERE dead_lettered_at IS NOT NULL)::text AS dead_lettered_outbox,
         (SELECT count(*) FROM txline_cursors WHERE heartbeat_at IS NULL OR heartbeat_at < clock_timestamp() - interval '2 minutes')::text AS stale_txline_cursors,
-        (SELECT count(*) FROM sponsored_transaction_templates WHERE status = 'ambiguous')::text AS ambiguous_transactions,
+        ((SELECT count(*) FROM sponsored_transaction_templates WHERE status = 'ambiguous')
+          + (SELECT count(*) FROM chain_transactions WHERE status = 'ambiguous'))::text AS ambiguous_transactions,
         (SELECT count(*) FROM txline_events WHERE encrypted_raw_payload IS NOT NULL AND raw_delete_after <= clock_timestamp())::text AS overdue_raw_payloads,
         (SELECT count(*) FROM registration_projections)::text AS registrations,
         (SELECT COALESCE(sum(winner_count), 0) FROM round_projections)::text AS winners,
@@ -260,27 +261,51 @@ export async function createApp(
       "request rejected",
     );
     if (reply.sent) return;
-    const validation =
-      typeof error === "object" && error !== null && "validation" in error;
-    const status =
-      validation || caught.name === "ZodError"
-        ? 400
-        : /not found/i.test(caught.message)
-          ? 404
-          : /duplicate|already|not open|expired|used|state/i.test(
-                caught.message,
-              )
-            ? 409
-            : /unavailable|database|rpc/i.test(caught.message)
-              ? 503
-              : 400;
+    const response = classifyRequestError(error, caught);
+    const status = response.status;
     reply.code(status).send({
-      error: status === 503 ? "service_unavailable" : "request_rejected",
-      message: caught.message,
+      error: response.error,
+      message: response.message,
       requestId: request.id,
     });
   });
   return app;
+}
+
+export function classifyRequestError(
+  original: unknown,
+  caught = original instanceof Error
+    ? original
+    : new Error("Unknown request error"),
+): { status: number; error: string; message: string } {
+  const validation =
+    typeof original === "object" &&
+    original !== null &&
+    "validation" in original;
+  const infrastructure =
+    /unavailable|database|rpc|econnrefused|econnreset|connection (?:ended|terminated)|socket|network|fetch failed|timeout|timed out|rate.?limit|\b429\b|\b503\b/i.test(
+      caught.message,
+    );
+  const status =
+    validation || caught.name === "ZodError"
+      ? 400
+      : /not found/i.test(caught.message)
+        ? 404
+        : /duplicate|already|not open|\bexpired\b|\bused\b|\bstate\b/i.test(
+              caught.message,
+            )
+          ? 409
+          : infrastructure
+            ? 503
+            : 400;
+  return {
+    status,
+    error: status === 503 ? "service_unavailable" : "request_rejected",
+    message:
+      status === 503
+        ? "Service temporarily unavailable; retry shortly."
+        : caught.message,
+  };
 }
 
 function createMetrics() {

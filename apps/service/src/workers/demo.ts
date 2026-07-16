@@ -1,4 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
+import { RoundSource } from "@goaldrop/protocol";
 import {
   claimOutboxBatch,
   deferOutbox,
@@ -20,6 +21,7 @@ import type { ServiceConfig } from "../config.js";
 import {
   connectionFor,
   keypairFromConfig,
+  resolveGoalRound,
   sendWorkerTransaction,
   waitForAccount,
 } from "./solana.js";
@@ -108,8 +110,6 @@ async function openDemo(
   if (!campaignInfo || !campaignInfo.owner.equals(programId))
     throw new Error("demo campaign account is absent");
   const campaign = decodeCampaignAccount(campaignInfo.data);
-  if (campaign.nextRound >= campaign.roundCount)
-    throw new Error("demo campaign has no reward round remaining");
   const eventHash = sha256(
     new TextEncoder().encode(
       `GOALDROP_DEMO_V1:${payload.campaign}:${payload.step}:${message.id}`,
@@ -119,14 +119,20 @@ async function openDemo(
     new TextEncoder().encode(`synthetic-devnet-goal:${payload.step}`),
   );
   const [configAddress] = configPda(programId);
-  const [roundAddress] = roundPda(
+  const [goalReceipt] = goalReceiptPda(programId, campaignAddress, eventHash);
+  const receiptInfo = await connection.getAccountInfo(goalReceipt, "confirmed");
+  const resolved = resolveGoalRound({
     programId,
     campaignAddress,
-    campaign.nextRound,
-  );
-  const [goalReceipt] = goalReceiptPda(programId, campaignAddress, eventHash);
+    campaign,
+    eventHash,
+    expectedSource: RoundSource.Demo,
+    receiptInfo,
+  });
+  if (!resolved) throw new Error("demo campaign has no reward round remaining");
+  const [roundAddress] = roundPda(programId, campaignAddress, resolved.ordinal);
   let signature: string | undefined;
-  if (!(await connection.getAccountInfo(goalReceipt, "confirmed"))) {
+  if (!resolved.alreadyOpened) {
     const ix = openDemoRoundInstruction(
       programId,
       {

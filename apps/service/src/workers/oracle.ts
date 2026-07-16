@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { bytesFromHex } from "@goaldrop/protocol";
+import { bytesFromHex, RoundSource, TerminalReason } from "@goaldrop/protocol";
 import {
   claimOutboxBatch,
   deferOutbox,
@@ -22,6 +22,7 @@ import type { ServiceConfig } from "../config.js";
 import {
   connectionFor,
   keypairFromConfig,
+  resolveGoalRound,
   sendWorkerTransaction,
   waitForAccount,
 } from "./solana.js";
@@ -131,25 +132,27 @@ async function processGoal(
   const campaign = decodeCampaignAccount(campaignInfo.data);
   if (campaign.fixtureId !== BigInt(payload.fixtureId))
     throw new Error("provider fixture disagrees with campaign");
-  if (campaign.nextRound >= campaign.roundCount) {
+  const eventHash = bytesFromHex(payload.eventKey, 32);
+  const [goalReceipt] = goalReceiptPda(programId, campaignAddress, eventHash);
+  const receiptInfo = await connection.getAccountInfo(goalReceipt, "confirmed");
+  const resolved = resolveGoalRound({
+    programId,
+    campaignAddress,
+    campaign,
+    eventHash,
+    expectedSource: RoundSource.Live,
+    receiptInfo,
+  });
+  if (!resolved) {
     await pool.query(
       "UPDATE goal_decisions SET oracle_status = 'not_required', reason = 'goal_no_reward' WHERE event_key = $1",
       [Buffer.from(payload.eventKey, "hex")],
     );
     return;
   }
-  const [roundAddress] = roundPda(
-    programId,
-    campaignAddress,
-    campaign.nextRound,
-  );
-  const [goalReceipt] = goalReceiptPda(
-    programId,
-    campaignAddress,
-    bytesFromHex(payload.eventKey, 32),
-  );
+  const [roundAddress] = roundPda(programId, campaignAddress, resolved.ordinal);
   let signature: string | undefined;
-  if (!(await connection.getAccountInfo(goalReceipt, "confirmed"))) {
+  if (!resolved.alreadyOpened) {
     const ix = openLiveRoundInstruction(
       programId,
       {
@@ -162,7 +165,7 @@ async function processGoal(
       },
       {
         fixtureId: campaign.fixtureId,
-        eventHash: bytesFromHex(payload.eventKey, 32),
+        eventHash,
         providerActionId: BigInt(payload.actionId),
         providerSeq: payload.seq,
         providerStatus: payload.status,
@@ -269,7 +272,7 @@ async function processGoal(
   }
 }
 
-async function processCompletion(
+export async function processCompletion(
   config: ServiceConfig,
   pool: DatabasePool,
   connection: ReturnType<typeof connectionFor>,
@@ -281,31 +284,61 @@ async function processCompletion(
   const programId = new PublicKey(config.GOALDROP_PROGRAM_ID);
   const campaign = new PublicKey(payload.campaign);
   const [configAddress] = configPda(programId);
-  const ix = markMatchCompleteInstruction(
-    programId,
-    { config: configAddress, campaign, oracle: oracle.publicKey },
-    {
-      terminalReason: 1,
-      providerActionId: 0n,
-      providerSeq: Number(payload.seq),
-    },
-  );
-  const { signature } = await sendWorkerTransaction({
-    config,
-    pool,
-    connection,
-    purpose: "mark_match_complete",
-    aggregateKey: payload.campaign,
-    instructions: [ix],
-    feePayer,
-    authority: oracle,
-    compute: { units: 80_000, microLamports: 1_000 },
-    traceId: message.traceId,
-  });
+  let state = await readCampaign(connection, programId, campaign);
+  let signature: string | undefined;
+  if (state.terminalReason === TerminalReason.None) {
+    const ix = markMatchCompleteInstruction(
+      programId,
+      { config: configAddress, campaign, oracle: oracle.publicKey },
+      {
+        terminalReason: TerminalReason.ProviderFinalised,
+        providerActionId: 0n,
+        providerSeq: Number(payload.seq),
+      },
+    );
+    try {
+      signature = (
+        await sendWorkerTransaction({
+          config,
+          pool,
+          connection,
+          purpose: "mark_match_complete",
+          aggregateKey: payload.campaign,
+          instructions: [ix],
+          feePayer,
+          authority: oracle,
+          compute: { units: 80_000, microLamports: 1_000 },
+          traceId: message.traceId,
+        })
+      ).signature;
+    } catch (error) {
+      const reconciled = await waitForTerminalCampaign(
+        connection,
+        programId,
+        campaign,
+      );
+      if (!reconciled) throw error;
+      state = reconciled;
+    }
+    if (state.terminalReason === TerminalReason.None)
+      state = await readCampaign(connection, programId, campaign);
+  }
+  if (!signature) {
+    const recorded = await pool.query<{ signature: string | null }>(
+      `SELECT signature FROM chain_transactions
+       WHERE purpose = 'mark_match_complete' AND aggregate_key = $1 AND trace_id = $2
+       ORDER BY id DESC LIMIT 1`,
+      [payload.campaign, message.traceId],
+    );
+    signature = recorded.rows[0]?.signature ?? undefined;
+  }
+  const terminalReason = terminalReasonName(state.terminalReason);
+  if (terminalReason === "none")
+    throw new Error("campaign did not reach a terminal on-chain state");
   await pool.query(
-    `UPDATE campaign_projections SET terminal_reason = 'provider_finalised', updated_at = clock_timestamp()
+    `UPDATE campaign_projections SET terminal_reason = $2, updated_at = clock_timestamp()
      WHERE campaign = $1`,
-    [payload.campaign],
+    [payload.campaign, terminalReason],
   );
   await pool.query(
     `INSERT INTO application_events (campaign, event_type, safe_payload, trace_id)
@@ -314,12 +347,49 @@ async function processCompletion(
       payload.campaign,
       JSON.stringify({
         campaign: payload.campaign,
-        terminalReason: "provider_finalised",
-        transactionSignature: signature,
+        terminalReason,
+        transactionSignature: signature ?? null,
       }),
       message.traceId,
     ],
   );
+}
+
+async function readCampaign(
+  connection: ReturnType<typeof connectionFor>,
+  programId: PublicKey,
+  campaign: PublicKey,
+) {
+  const info = await connection.getAccountInfo(campaign, "confirmed");
+  if (!info || !info.owner.equals(programId) || info.data.length !== 424)
+    throw new Error("campaign account is absent or has wrong owner/layout");
+  return decodeCampaignAccount(info.data);
+}
+
+async function waitForTerminalCampaign(
+  connection: ReturnType<typeof connectionFor>,
+  programId: PublicKey,
+  campaign: PublicKey,
+) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const state = await readCampaign(connection, programId, campaign);
+    if (state.terminalReason !== TerminalReason.None) return state;
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return null;
+}
+
+function terminalReasonName(value: number): string {
+  const names = [
+    "none",
+    "provider_finalised",
+    "provider_cancelled",
+    "provider_abandoned",
+    "hard_timeout",
+  ] as const;
+  const name = names[value];
+  if (!name) throw new Error(`unknown campaign terminal reason ${value}`);
+  return name;
 }
 
 function delay(milliseconds: number, signal: AbortSignal): Promise<void> {

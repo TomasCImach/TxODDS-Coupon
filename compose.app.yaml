@@ -2,9 +2,35 @@ x-service: &service
   build:
     context: .
     dockerfile: apps/service/Dockerfile
-  env_file: .env
-  environment:
+  environment: &service-environment
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: ${PORT:-4000}
+    TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    PUBLIC_ORIGIN: ${PUBLIC_ORIGIN}
     DATABASE_URL: postgres://goaldrop:goaldrop@postgres:5432/goaldrop
+    DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+    SOLANA_CLUSTER: devnet
+    SOLANA_HTTP_RPC_URL: ${SOLANA_HTTP_RPC_URL}
+    SOLANA_WS_RPC_URL: ${SOLANA_WS_RPC_URL}
+    GOALDROP_PROGRAM_ID: ${GOALDROP_PROGRAM_ID}
+    GOALDROP_REWARD_MINT: ${GOALDROP_REWARD_MINT}
+    TXLINE_API_ORIGIN: ${TXLINE_API_ORIGIN}
+    TXLINE_PROGRAM_ID: ${TXLINE_PROGRAM_ID}
+    TXLINE_TXL_MINT: ${TXLINE_TXL_MINT}
+    TXLINE_SERVICE_LEVEL: ${TXLINE_SERVICE_LEVEL:-1}
+    ROUND_DURATION_SECONDS: ${ROUND_DURATION_SECONDS:-120}
+    LIVE_EVENT_MAX_LATENESS_SECONDS: ${LIVE_EVENT_MAX_LATENESS_SECONDS:-60}
+    DEFAULT_HARD_EXPIRY_SECONDS: ${DEFAULT_HARD_EXPIRY_SECONDS:-28800}
+    TXLINE_LISTENER_ENABLED: ${TXLINE_LISTENER_ENABLED:-true}
+    TXLINE_PUBLIC_OUTPUT_ENABLED: ${TXLINE_PUBLIC_OUTPUT_ENABLED:-false}
+    TXLINE_RAW_RETENTION_ENABLED: ${TXLINE_RAW_RETENTION_ENABLED:-false}
+    DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-true}
+    DEMO_FAUCET_ENABLED: ${DEMO_FAUCET_ENABLED:-true}
+    DEMO_FAUCET_AMOUNT_BASE_UNITS: ${DEMO_FAUCET_AMOUNT_BASE_UNITS:-500000000}
+    DEMO_CAMPAIGN: ${DEMO_CAMPAIGN}
+    FEE_PAYER_MIN_LAMPORTS: ${FEE_PAYER_MIN_LAMPORTS:-500000000}
   depends_on:
     postgres:
       condition: service_healthy
@@ -18,6 +44,11 @@ services:
 
   api:
     <<: *service
+    environment:
+      <<: *service-environment
+      RELAYER_KEYPAIR: ${RELAYER_KEYPAIR}
+      RECEIPT_CAPABILITY_KEY: ${RECEIPT_CAPABILITY_KEY}
+      FEE_PAYER_KEYPAIR: ${FEE_PAYER_KEYPAIR}
     command: ["node", "apps/service/dist/cli.js", "api"]
     ports: ["4000:4000"]
     healthcheck:
@@ -28,22 +59,41 @@ services:
 
   txline-listener:
     <<: *service
+    environment:
+      <<: *service-environment
+      TXLINE_GUEST_JWT: ${TXLINE_GUEST_JWT}
+      TXLINE_API_TOKEN: ${TXLINE_API_TOKEN}
+      TXLINE_RAW_ENCRYPTION_KEY: ${TXLINE_RAW_ENCRYPTION_KEY}
     command: ["node", "apps/service/dist/cli.js", "txline-listener"]
 
   oracle-worker:
     <<: *service
+    environment:
+      <<: *service-environment
+      ORACLE_KEYPAIR: ${ORACLE_KEYPAIR}
+      FEE_PAYER_KEYPAIR: ${FEE_PAYER_KEYPAIR}
     command: ["node", "apps/service/dist/cli.js", "oracle-worker"]
 
   settlement-worker:
     <<: *service
+    environment:
+      <<: *service-environment
+      RELAYER_KEYPAIR: ${RELAYER_KEYPAIR}
+      FEE_PAYER_KEYPAIR: ${FEE_PAYER_KEYPAIR}
     command: ["node", "apps/service/dist/cli.js", "settlement-worker"]
 
   chain-indexer:
     <<: *service
+    environment:
+      <<: *service-environment
     command: ["node", "apps/service/dist/cli.js", "chain-indexer"]
 
   demo-controller:
     <<: *service
+    environment:
+      <<: *service-environment
+      DEMO_AUTHORITY_KEYPAIR: ${DEMO_AUTHORITY_KEYPAIR}
+      FEE_PAYER_KEYPAIR: ${FEE_PAYER_KEYPAIR}
     command: ["node", "apps/service/dist/cli.js", "demo-controller"]
 
   web:

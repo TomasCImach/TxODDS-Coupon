@@ -1,6 +1,7 @@
-FROM node:24-alpine AS builder
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS builder
 WORKDIR /workspace
-RUN corepack enable
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache python3 make g++ && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/ui/package.json packages/ui/package.json
@@ -27,8 +28,8 @@ ENV NEXT_PUBLIC_API_ORIGIN=$NEXT_PUBLIC_API_ORIGIN \
     NEXT_PUBLIC_DEMO_CAMPAIGN=$NEXT_PUBLIC_DEMO_CAMPAIGN
 RUN pnpm --filter @goaldrop/web build
 
-FROM node:24-alpine AS runtime
-ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runtime
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 COPY --from=builder /workspace/apps/web/.next/standalone ./
 COPY --from=builder /workspace/apps/web/.next/static ./apps/web/.next/static

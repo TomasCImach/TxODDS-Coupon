@@ -16,6 +16,7 @@ import {
   campaignPda,
   claimPda,
   configPda,
+  decodeGoalReceiptAccount,
   decodePlatformConfigAccount,
   fanSignatureVerificationInstruction,
   fixtureSlotPda,
@@ -88,6 +89,42 @@ describe("account decoding", () => {
     expect(decoded.demoAuthority.equals(demo)).toBe(true);
     expect(decoded.rewardMint.equals(mint)).toBe(true);
     expect(decoded.networkDomain).toEqual(new Uint8Array(32).fill(7));
+  });
+
+  it("decodes the round ordinal needed to recover an opened goal", () => {
+    const data = Buffer.alloc(168);
+    const campaign = Keypair.fromSeed(new Uint8Array(32).fill(26)).publicKey;
+    const eventHash = new Uint8Array(32).fill(27);
+    data[8] = 1;
+    data[9] = 253;
+    data[10] = 1;
+    data[11] = 3;
+    data.set(campaign.toBytes(), 12);
+    data.set(eventHash, 44);
+    data.writeBigUInt64LE(88n, 76);
+    data.writeUInt32LE(99, 84);
+    data.writeUInt16LE(100, 88);
+    data[90] = 1;
+    data.writeBigInt64LE(101n, 92);
+    data.writeBigInt64LE(102n, 100);
+    data.set(new Uint8Array(32).fill(28), 108);
+
+    const decoded = decodeGoalReceiptAccount(data);
+    expect(decoded).toMatchObject({
+      version: 1,
+      bump: 253,
+      source: 1,
+      roundOrdinal: 3,
+      providerActionId: 88n,
+      providerSeq: 99,
+      providerStatus: 100,
+      confirmedAtOpen: true,
+      providerTsMs: 101n,
+      openedAt: 102n,
+    });
+    expect(decoded.campaign.equals(campaign)).toBe(true);
+    expect(decoded.eventHash).toEqual(eventHash);
+    expect(decoded.rawDigest).toEqual(new Uint8Array(32).fill(28));
   });
 });
 

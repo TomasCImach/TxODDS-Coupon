@@ -81,6 +81,16 @@
       "evidence": [
         "docs/implementation-verification.md: production browser proved Instant Demo key absent from persistent storage and destroyed on reload; repository audit blocks private-key persistence; real registration/claim/transfer/reset path already passed"
       ]
+    },
+    {
+      "id": "RB-9",
+      "title": "Public HTTPS application, PostgreSQL runtime, and target-topology acceptance",
+      "owner": "platform-operations",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "Local container builds and single-host verification are complete, but no public runtime is configured. Resolution requires immutable web/service image digests, public HTTPS URL, managed PostgreSQL migration record, role health/readback, ingress-restricted internal health/metrics endpoints, clean-browser acceptance, rollback rehearsal, and target-topology load/SSE/latency evidence"
+      ]
     }
   ]
 }

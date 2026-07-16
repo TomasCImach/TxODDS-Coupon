@@ -1,6 +1,6 @@
-FROM node:24-alpine AS builder
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS builder
 WORKDIR /workspace
-RUN corepack enable
+RUN apk add --no-cache python3 make g++ && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/service/package.json apps/service/package.json
 COPY packages/db/package.json packages/db/package.json
@@ -12,7 +12,7 @@ COPY apps/service apps/service
 COPY packages packages
 RUN pnpm --filter @goaldrop/service... build
 
-FROM node:24-alpine AS runtime
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runtime
 ENV NODE_ENV=production
 WORKDIR /workspace
 RUN corepack enable

@@ -329,11 +329,14 @@ export async function registerPublicRoutes(
     async (_request, reply) => {
       try {
         await deps.pool.query("SELECT 1");
+        const degraded = deps.config.TXLINE_LISTENER_ENABLED
+          ? []
+          : ["live_feed"];
         return {
-          status: "ok",
+          status: degraded.length === 0 ? "ok" : "degraded",
           network: "solana:devnet",
           demoMode: deps.config.DEMO_MODE_ENABLED,
-          degraded: [],
+          degraded,
         };
       } catch {
         reply.code(503);
