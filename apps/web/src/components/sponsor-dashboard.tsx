@@ -223,6 +223,36 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
     }
   };
 
+  const claimFaucetTokens = async () => {
+    if (!wallet.publicKey || !wallet.signTransaction) {
+      setStatus("Select a transaction-capable sponsor wallet first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const built = await json<{
+        templateId: string;
+        transaction: string;
+      }>("/v1/faucet/build", { wallet: wallet.publicKey.toBase58() });
+      const transaction = VersionedTransaction.deserialize(
+        fromBase64(built.transaction),
+      );
+      const signed = await wallet.signTransaction(transaction);
+      const result = await json<Record<string, unknown>>("/v1/faucet/submit", {
+        templateId: built.templateId,
+        signedTransaction: toBase64(signed.serialize()),
+      });
+      setSourceTokenAccount(String(result.tokenAccount));
+      setStatus(
+        `Devnet faucet confirmed: ${formatBaseUnits(BigInt(String(result.amount)), decimals)} valueless GOAL in ${short(String(result.tokenAccount))}.`,
+      );
+    } catch (error) {
+      setStatus(message(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const funded = BigInt(campaignStats?.fundedAmount ?? 0);
   const paid = BigInt(campaignStats?.paidAmount ?? 0);
   const refunded = BigInt(campaignStats?.refundedAmount ?? 0);
@@ -513,7 +543,19 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                 }
                 placeholder="Required for exact funding"
               />
+              <small>
+                The wallet-signed Devnet faucet supplies 500 valueless GOAL once
+                per sponsor wallet; it never distributes real assets.
+              </small>
             </label>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy || !wallet.connected || !wallet.signTransaction}
+              onClick={() => void claimFaucetTokens()}
+            >
+              Get 500 free Devnet GOAL
+            </button>
             <div className="lifecycle-actions">
               <button
                 type="button"

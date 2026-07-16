@@ -315,7 +315,7 @@ Period-specific keys are `period_prefix + base_key`:
 
 Other integration details:
 
-- A final score record currently uses `action=game_finalised`, `statusId=100`, and `period=100`, regardless of regulation, extra time, penalties, or abandonment.
+- A final score record uses `Action=game_finalised`. In the private authenticated July 16 sample, `StatusId` was either `100` or absent and `Period` was absent; the adapter accepts absent/`100` optional markers and rejects contradictory values.
 - Fixture `GameState` values currently documented are `1` for scheduled and `6` for cancelled.
 - `Participant1IsHome` is a feed designation, not a claim that the match is in that participant’s country.
 - Hydration breaks arrive as `comment` with `Data.Text = "Water-drinking break"`.
@@ -389,7 +389,7 @@ Canonical source: [TxLINE OpenAPI YAML, version 1.5.6 when verified](https://txl
 | SSE opens but no data | Check covered fixture time, keep the stream open, or use historical replay. |
 | `InvalidMainTreeProof` | Proof timestamp, epoch-day PDA, fixture/sequence, and 32-byte proof decoding. |
 | V2 validates wrong value | Preserve `statKeys` order and use positional strategy indexes. |
-| Final result is wrong | Select `game_finalised` with `statusId=100` and `period=100`. |
+| Final result is wrong | Select `game_finalised`; accept optional `StatusId`/`Period` only when absent or `100`, and re-run `pnpm txline:validate-live`. |
 
 When requesting support, include the network, endpoint, status code, program ID, service level, redacted transaction signature, fixture/sequence/stat/timestamp/PDA details, and a redacted response body. Never send a JWT, API token, secret key, or unredacted authorization log.
 

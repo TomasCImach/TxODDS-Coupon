@@ -40,6 +40,8 @@ The load harness first proves 1,000 distinct registration requests can be durabl
 Current local evidence and external Devnet release gates are recorded in [docs/implementation-verification.md](./docs/implementation-verification.md).
 Requirement-level status is recorded in [docs/prd-traceability.md](./docs/prd-traceability.md); the machine-readable release ledger is [docs/release-blockers.json](./docs/release-blockers.json). `pnpm release:check` intentionally fails until every external blocker is resolved and linked evidence is present.
 
+With private TxLINE credentials present only in the ignored root `.env`, run `pnpm txline:validate-live`. It validates the current authenticated PascalCase fixture/score envelope and goal/correction/finalization semantics while printing only counts and schema-shape digests; it never persists or prints a licensed raw payload.
+
 ## Running the application
 
 Copy `.env.example` to `.env` outside version control and fill role-scoped Devnet credentials. Start the API and UI during development with `pnpm dev`; run workers independently with the `start:*` scripts in `apps/service/package.json`. For a container deployment:
@@ -55,7 +57,7 @@ The API validates the deployed `PlatformConfig` before any role starts. Authorit
 1. Generate distinct admin, oracle, relayer, demo, fee-payer, sponsor, and TxLINE subscription wallets.
 2. Create a classic SPL reward mint with six decimals and no freeze authority.
 3. Build/deploy the program, synchronize its declared program ID, and initialize `PlatformConfig` with the reward mint and distinct authorities.
-4. Activate the World Cup TxLINE Devnet subscription, retain the guest JWT/API token in the secret store, and privately validate the current fixture/goal schema.
+4. Activate the World Cup TxLINE Devnet subscription, retain the guest JWT/API token in the secret store, and run `pnpm txline:validate-live`.
 5. Create, exactly fund, and activate a resettable demo campaign; set `DEMO_CAMPAIGN` and `NEXT_PUBLIC_DEMO_CAMPAIGN`.
 6. Run the acceptance checklist in [docs/runbooks/devnet-release.md](./docs/runbooks/devnet-release.md).
 

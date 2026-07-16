@@ -65,6 +65,12 @@ const schema = z.object({
   TXLINE_PUBLIC_OUTPUT_ENABLED: booleanString.default(false),
   TXLINE_RAW_RETENTION_ENABLED: booleanString.default(false),
   DEMO_MODE_ENABLED: booleanString.default(true),
+  DEMO_FAUCET_ENABLED: booleanString.default(true),
+  DEMO_FAUCET_AMOUNT_BASE_UNITS: z.coerce
+    .bigint()
+    .min(1n)
+    .max(1_000_000_000_000n)
+    .default(500_000_000n),
   RECEIPT_CAPABILITY_KEY: z.string().min(32).optional(),
   TXLINE_GUEST_JWT: z.string().optional(),
   TXLINE_API_TOKEN: z.string().optional(),

@@ -64,7 +64,7 @@ integration("GoalDrop HTTP contracts", () => {
     });
     pool = createPool(databaseUrl);
     await pool.query(`TRUNCATE TABLE
-      analytics_events, sponsored_transaction_templates, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
+      analytics_events, demo_faucet_claims, sponsored_transaction_templates, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
       registration_projections, round_projections, campaign_projections, fixture_catalog,
       txline_events, txline_cursors, goal_decisions, audit_log,
       outbox, application_events RESTART IDENTITY CASCADE`);

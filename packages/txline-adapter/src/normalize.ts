@@ -81,6 +81,7 @@ export function normalizeGoal(
     throw new Error("goal participant is required");
   const fixtureId = asBigInt(record.fixtureId, "fixtureId");
   const actionId = asBigInt(record.id, "id");
+  if (actionId === 0n) throw new Error("id must be positive for a goal");
   const goalType =
     record.goalType === null || record.goalType === undefined
       ? null
@@ -130,6 +131,8 @@ export function decideRecord(
   if (
     record.action === "action_amend" ||
     record.action === "action_discarded" ||
+    record.action === "var" ||
+    record.action === "var_end" ||
     record.var !== undefined
   ) {
     const originalActionId = asBigInt(
@@ -148,7 +151,8 @@ export function decideRecord(
     };
   }
   if (record.action === "game_finalised") {
-    return record.statusId === 100 && record.period === 100
+    return (record.statusId === undefined || record.statusId === 100) &&
+      (record.period === undefined || record.period === 100)
       ? { kind: "terminal", reason: "provider_finalised" }
       : { kind: "ignored", reason: "invalid_finalisation_marker" };
   }

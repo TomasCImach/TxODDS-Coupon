@@ -64,6 +64,14 @@ for (const file of browserSources) {
   if (/from ["']@goaldrop\/(?:db|txline-adapter)["']/.test(source)) {
     findings.push(`${file}: browser surface imports a server-only package`);
   }
+  if (
+    /\b(?:localStorage|sessionStorage|indexedDB)\b/.test(source) &&
+    /\bsecretKey\b/.test(source)
+  ) {
+    findings.push(
+      `${file}: browser private-key material must not enter persistent storage`,
+    );
+  }
 }
 
 if (findings.length) {

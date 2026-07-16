@@ -3,9 +3,11 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
+  createMintToCheckedInstruction,
   createTransferCheckedInstruction,
   getAccount,
   getAssociatedTokenAddressSync,
+  getMint,
 } from "@solana/spl-token";
 import {
   buildSponsoredV0Transaction,
@@ -26,9 +28,8 @@ import {
   ComputeBudgetProgram,
   Connection,
   PublicKey,
-  SystemProgram,
+  TransactionInstruction,
   VersionedTransaction,
-  type TransactionInstruction,
 } from "@solana/web3.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -78,8 +79,13 @@ const submitRequest = z.object({
   templateId: z.string().uuid(),
   signedTransaction: z.string().min(100).max(5_000),
 });
+const faucetRequest = z.object({ wallet: address });
+const memoProgram = new PublicKey(
+  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+);
 
-type Action = "create" | "fund" | "activate" | "cancel" | "refund" | "transfer";
+type Action =
+  "create" | "fund" | "activate" | "cancel" | "refund" | "transfer" | "faucet";
 
 interface TemplateRow {
   id: string;
@@ -178,6 +184,146 @@ export async function registerTransactionRoutes(
       ]);
     },
   );
+
+  app.post(
+    "/v1/faucet/build",
+    {
+      schema: {
+        tags: ["sponsor"],
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["wallet"],
+          properties: { wallet: { type: "string", maxLength: 44 } },
+        },
+      },
+      config: { rateLimit: { max: 5, timeWindow: "1 day" } },
+    },
+    async (request) => {
+      requireWriteOrigin(request, deps.config);
+      return buildFaucetTemplate(
+        deps,
+        faucetRequest.parse(request.body),
+        request.id,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/faucet/submit",
+    {
+      schema: submitSchema("sponsor"),
+      config: { rateLimit: { max: 5, timeWindow: "1 day" } },
+    },
+    async (request) => {
+      requireWriteOrigin(request, deps.config);
+      const input = submitRequest.parse(request.body);
+      const result = await submitTemplate(deps, input, ["faucet"]);
+      await deps.pool.query(
+        `UPDATE demo_faucet_claims
+         SET status = 'submitted', transaction_signature = $2, updated_at = clock_timestamp()
+         WHERE template_id = $1`,
+        [input.templateId, result.signature],
+      );
+      return result;
+    },
+  );
+}
+
+async function buildFaucetTemplate(
+  deps: RouteDependencies,
+  input: z.infer<typeof faucetRequest>,
+  traceId: string,
+) {
+  if (!deps.config.DEMO_MODE_ENABLED || !deps.config.DEMO_FAUCET_ENABLED)
+    throw new Error("Devnet demo faucet is disabled");
+  const context = transactionContext(deps);
+  const wallet = new PublicKey(input.wallet);
+  const rewardDecimals = deps.onchain.rewardDecimals ?? 6;
+  const mint = await getMint(
+    context.connection,
+    context.rewardMint,
+    "confirmed",
+    TOKEN_PROGRAM_ID,
+  );
+  if (
+    !mint.mintAuthority?.equals(context.feePayer.publicKey) ||
+    mint.freezeAuthority !== null ||
+    mint.decimals !== rewardDecimals
+  ) {
+    throw new Error("reward mint does not satisfy the Devnet faucet policy");
+  }
+  const tokenAccount = getAssociatedTokenAddressSync(
+    context.rewardMint,
+    wallet,
+    true,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
+  const amount = deps.config.DEMO_FAUCET_AMOUNT_BASE_UNITS;
+  const reserved = await deps.pool.query(
+    `INSERT INTO demo_faucet_claims (wallet, mint, token_account, amount, status)
+     VALUES ($1,$2,$3,$4,'reserved') ON CONFLICT (wallet) DO NOTHING RETURNING wallet`,
+    [
+      wallet.toBase58(),
+      context.rewardMint.toBase58(),
+      tokenAccount.toBase58(),
+      amount.toString(),
+    ],
+  );
+  if (reserved.rowCount !== 1)
+    throw new Error("this wallet has already used the Devnet demo faucet");
+  try {
+    const result = await issueTemplate(deps, context.connection, {
+      action: "faucet",
+      actor: wallet,
+      instructions: [
+        new TransactionInstruction({
+          programId: memoProgram,
+          keys: [{ pubkey: wallet, isSigner: true, isWritable: false }],
+          data: Buffer.from("GoalDrop valueless Devnet faucet v1"),
+        }),
+        createAssociatedTokenAccountIdempotentInstruction(
+          context.feePayer.publicKey,
+          tokenAccount,
+          wallet,
+          context.rewardMint,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID,
+        ),
+        createMintToCheckedInstruction(
+          context.rewardMint,
+          tokenAccount,
+          context.feePayer.publicKey,
+          amount,
+          rewardDecimals,
+          [],
+          TOKEN_PROGRAM_ID,
+        ),
+      ],
+      traceId,
+      metadata: {
+        wallet: wallet.toBase58(),
+        mint: context.rewardMint.toBase58(),
+        tokenAccount: tokenAccount.toBase58(),
+        amount: amount.toString(),
+        decimals: rewardDecimals,
+        policy: "one-wallet-signed-distribution",
+      },
+    });
+    await deps.pool.query(
+      `UPDATE demo_faucet_claims SET status = 'built', template_id = $2,
+         updated_at = clock_timestamp() WHERE wallet = $1 AND status = 'reserved'`,
+      [wallet.toBase58(), result.templateId],
+    );
+    return result;
+  } catch (error) {
+    await deps.pool.query(
+      "DELETE FROM demo_faucet_claims WHERE wallet = $1 AND status = 'reserved'",
+      [wallet.toBase58()],
+    );
+    throw error;
+  }
 }
 
 async function buildSponsorTemplate(

@@ -98,7 +98,7 @@ Work proceeds under these assumptions. A failed assumption requires the named fa
 
 ### Q1. What is a stable TxLINE goal identity, and when should a drop open?
 
-**Research.** The TxODDS soccer-feed specification says a goal has `Action = "goal"`, an action `Id`, a fixture-scoped update `Seq`, and a `Confirmed` flag. An unconfirmed event is closer to the action on the field; a later confirmation uses the same action ID. The same specification defines `action_amend` and `action_discarded`, with the original action ID used to identify what changed. See the [soccer feed page](https://txline.txodds.com/documentation/scores/soccer-feed) and the [Soccer Feed v1.1 PDF](https://txodds.github.io/tx-on-chain/assets/txodds-soccer-feed-v1.1.pdf).
+**Research.** The TxODDS soccer-feed specification says a goal has `Action = "goal"`, an action `Id`, a fixture-scoped update `Seq`, and a `Confirmed` flag. An unconfirmed event is closer to the action on the field; a later confirmation uses the same action ID. The same specification defines `action_amend` and `action_discarded`. A private, credentialed Devnet validation on July 16 parsed 21,757 records from 20 historical fixtures: every wire record used PascalCase, all 49 repeated goal IDs paired unconfirmed and confirmed records, and the sample contained 273 amendment/discard/VAR records. No licensed payload was persisted. See the [soccer feed page](https://txline.txodds.com/documentation/scores/soccer-feed) and the [Soccer Feed v1.1 PDF](https://txodds.github.io/tx-on-chain/assets/txodds-soccer-feed-v1.1.pdf).
 
 **Suggested answer adopted.** Open on the first well-formed `goal` record, whether `confirmed` is false or true. Define:
 
@@ -152,9 +152,9 @@ The first update wins the idempotency race. Later confirmation, amendment, VAR, 
 
 ### Q9. What final event and timeout make funds refundable?
 
-**Research.** TxLINE documents a final score record using `action = game_finalised`, `statusId = 100`, and `period = 100`, independent of regulation, extra time, penalties, or abandonment. It also documents interrupted, abandoned, cancelled, coverage-cancelled, suspended, and postponed soccer phases. See the [scores overview](https://txline.txodds.com/documentation/scores/overview).
+**Research.** TxLINE documents `game_finalised` as the final score action and documents interrupted, abandoned, cancelled, coverage-cancelled, suspended, and postponed soccer phases. The private authenticated July 16 sample contained 20 `game_finalised` records: 17 carried `StatusId = 100`, three omitted `StatusId`, and all omitted `Period`. This contradicts the earlier assumption that both `statusId = 100` and `period = 100` are always present. See the [scores overview](https://txline.txodds.com/documentation/scores/overview).
 
-**Suggested answer adopted.** The oracle marks the campaign complete upon `game_finalised`. It may also mark an explicit terminal cancellation/abandonment after recording the provider state. Independently, anyone may finalize after `hard_expiry`, defaulting to scheduled kickoff plus eight hours. Every open round must first be exhausted or expired. A postponed fixture does not carry the campaign to a new date in the MVP.
+**Suggested answer adopted.** The oracle marks the campaign complete upon a well-formed `game_finalised` action. If `StatusId` or `Period` is present it must equal `100`; absence is accepted, while a contradictory value is rejected. It may also mark an explicit terminal cancellation/abandonment after recording the provider state. Independently, anyone may finalize after `hard_expiry`, defaulting to scheduled kickoff plus eight hours. Every open round must first be exhausted or expired. A postponed fixture does not carry the campaign to a new date in the MVP.
 
 ### Q10. Can the Devnet MVP use a sponsor token without expanding into regulated wagering or prize-promotion scope?
 
@@ -790,11 +790,11 @@ For each active live campaign:
 1. Load a server-side fixture snapshot for metadata.
 2. Load the latest score snapshot to hydrate current phase and score.
 3. Open `/api/scores/stream?fixtureId={fixtureId}` with both required auth headers and the last SSE ID.
-4. Parse SSE framing, ignore heartbeat events, and validate each JSON record against the pinned adapter schema.
+4. Parse SSE framing, normalize the authenticated PascalCase wire envelope to the pinned internal camelCase schema, ignore heartbeat/unsupported actions, and reject malformed semantic records.
 5. Store provider cursor, raw digest, normalized metadata, and decision in one database transaction.
 6. For a qualifying goal, insert `goal_decision` under the unique event key and enqueue an oracle command through the outbox.
 7. For confirmation/amend/discard/VAR, append audit metadata without changing an opened round.
-8. For `game_finalised` with the documented `statusId = 100` and `period = 100`, enqueue match completion; otherwise record a schema/semantic alert.
+8. For `game_finalised`, enqueue match completion when optional `StatusId` and `Period` are absent or `100`; reject contradictory markers and record a schema/semantic alert.
 
 The adapter version is stored with every decision. Upgrade the adapter explicitly when TxLINE changes fields; never allow a schema library to coerce missing identifiers to zero.
 
@@ -1709,18 +1709,18 @@ No UI-heavy work should outrun these gates.
 - [ ] Each row's named verification directly exercises the full requirement scope; a narrow unit test cannot be the sole evidence for an end-to-end or performance claim.
 - [ ] A failed traceability row blocks Devnet MVP acceptance unless the PRD and architecture are explicitly revised together.
 
-## 23. Remaining release blockers
+## 23. Release-blocker ledger
 
-These do not prevent architecture definition, but they block claiming the deployed MVP is complete:
+These do not prevent architecture definition, but any open item blocks claiming the deployed MVP is complete. The machine-readable current status and evidence live in `docs/release-blockers.json`; as of July 16, 2026, RB-2, RB-5, RB-6, RB-7, and RB-8 are resolved, while RB-1, RB-3, and RB-4 remain open:
 
-1. **TxODDS written permission:** public derived display, short-lived raw retention, and synthetic-vs-recorded demo behavior.
-2. **Live schema validation:** confirm actual casing/types for goal, status, score, confirmation, correction, and finalization records from the selected Devnet subscription.
-3. **Passkey signing spike:** prove `solana:signMessage`, transaction signing, recovery, and export on the actual SDK version and demo devices.
-4. **Transaction benchmark:** prove serialized bytes, compute, contention, drain time, and retry behavior for 100 individual claims; decide whether the two-claim optimization is necessary.
-5. **RPC capacity:** select a Devnet RPC/WebSocket service with sufficient request and subscription capacity for the burst/demo.
-6. **Timeout approval:** product owner accepts kickoff plus eight hours and the rule that postponed matches refund rather than follow a reschedule.
-7. **Demo-token policy:** publish the mint address, decimals, valueless labeling, faucet limits, and immutable no-freeze status.
-8. **Judge Quickstart security review:** ensure the ephemeral demo signer cannot escape Demo Mode or be mistaken for a recoverable product wallet.
+1. **TxODDS written permission (open):** public derived display, caching/retention, and synthetic-vs-recorded demo behavior.
+2. **Live schema validation (resolved):** authenticated PascalCase goal, status, confirmation, correction/VAR, and finalization records parse with zero failures in the recorded private validation window.
+3. **Passkey signing spike (open):** prove `solana:signMessage`, transaction signing, recovery, and export on the actual SDK version and physical demo devices.
+4. **Transaction benchmark (open):** prove serialized bytes, compute, contention, drain time, and retry behavior for 100 individual claims; decide whether the two-claim optimization is necessary.
+5. **RPC capacity (resolved for MVP):** the requester selected the Foundation public Devnet RPC; targeted reads/writes pass, broad scans degrade safely, and RB-4 separately gates settlement scale.
+6. **Timeout approval (resolved):** the requester authorized documented assumptions, so kickoff plus eight hours and refund-on-postponement are adopted for the Devnet MVP.
+7. **Demo-token policy (resolved):** the published classic SPL mint is six-decimal, valueless, has no freeze authority, and has a wallet-signed one-use 500-GOAL faucet.
+8. **Judge Quickstart security review (resolved):** the Instant Demo signer is memory-only, disappears on reload/disconnect, and repository checks reject browser private-key persistence.
 
 ### 23.1 Acceptance criteria
 

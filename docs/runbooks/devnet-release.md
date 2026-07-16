@@ -7,6 +7,9 @@
 - Confirm the classic reward mint has six decimals, no freeze authority, and owner `Tokenkeg…`; the TxLINE TxL mint remains isolated under Token-2022.
 - Confirm admin, oracle, relayer, demo, fee payer, sponsor, and TxLINE subscription wallets are distinct where required and have only the secrets their role needs.
 - Run `pnpm verify`, native Rust tests, the SBF build, the local-validator Anchor seam, the 1,000-registration/500-claim load harness, both container builds, and browser checks at desktop and 390 px mobile widths.
+- Run `pnpm txline:validate-live` privately; retain only its redacted counts/digests and require zero parse failures with goal, correction, and terminal coverage.
+- Confirm the one-use, wallet-signed faucet mints exactly 500 valueless GOAL to the requesting wallet's canonical classic ATA and rejects duplicate use.
+- Confirm Instant Demo creates no key-bearing local/session/IndexedDB entry and disappears after reload.
 - Confirm the API refuses new sponsored work below `FEE_PAYER_MIN_LAMPORTS`, accepted duplicates remain readable, and the fee-payer balance gauge/alert is healthy.
 
 ## Deployment order

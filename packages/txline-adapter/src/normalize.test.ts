@@ -106,19 +106,83 @@ describe("TxLINE soccer adapter", () => {
     expect(decideRecord({ ...final, period: 99 }, raw)).toMatchObject({
       kind: "ignored",
     });
+    expect(
+      decideRecord(
+        parseTxlineRecord({
+          Action: "game_finalised",
+          FixtureId: Number(baseGoal.fixtureId),
+          Id: 9010,
+          Seq: 90,
+          Ts: Number(baseGoal.ts),
+          StatusId: 100,
+        }),
+        raw,
+      ),
+    ).toEqual({ kind: "terminal", reason: "provider_finalised" });
   });
 
-  it("rejects malformed or unknown records instead of guessing", () => {
+  it("rejects malformed records and safely ignores unsupported actions", () => {
     expect(() =>
       parseTxlineRecord({ ...baseGoal, id: undefined }),
     ).not.toThrow();
     expect(() =>
       decideRecord(parseTxlineRecord({ ...baseGoal, id: undefined }), raw),
     ).toThrow(/id/);
-    expect(() =>
-      parseTxlineRecord({ ...baseGoal, action: "mystery" }),
-    ).toThrow();
+    expect(
+      decideRecord(parseTxlineRecord({ ...baseGoal, action: "mystery" }), raw),
+    ).toMatchObject({ kind: "ignored", reason: "unsupported_action" });
     expect(goalEventKey(1n, 2n)).toHaveLength(32);
+  });
+
+  it("normalizes the authenticated PascalCase wire envelope", () => {
+    const decision = decideRecord(
+      parseTxlineRecord({
+        Action: "goal",
+        FixtureId: Number(baseGoal.fixtureId),
+        Id: 7001,
+        Seq: 42,
+        Ts: Number(baseGoal.ts),
+        StatusId: 2,
+        Confirmed: true,
+        Participant: 1,
+        Data: { GoalType: "Own", PlayerId: 9001 },
+        Score: { ignored: true },
+        Stats: { ignored: true },
+      }),
+      raw,
+    );
+    expect(decision).toMatchObject({
+      kind: "qualifying_goal",
+      goal: {
+        actionId: 7001n,
+        confirmed: true,
+        goalType: "Own",
+        participant: 1,
+        playerId: 9001n,
+        statusSoccerId: 2,
+      },
+    });
+  });
+
+  it.each([
+    ["action_discarded", undefined],
+    ["action_amend", { Action: "goal", New: {}, Previous: {} }],
+    ["var", { Type: "Goal" }],
+    ["var_end", { Outcome: "Overturned" }],
+  ])("audits PascalCase %s records without clawback", (Action, Data) => {
+    expect(
+      decideRecord(
+        parseTxlineRecord({
+          Action,
+          FixtureId: Number(baseGoal.fixtureId),
+          Id: 7001,
+          Seq: 44,
+          Ts: Number(baseGoal.ts),
+          ...(Data ? { Data } : {}),
+        }),
+        raw,
+      ),
+    ).toMatchObject({ kind: "audit_only", originalActionId: 7001n });
   });
 
   it("keeps the committed synthetic match fixture compatible with the adapter contract", async () => {

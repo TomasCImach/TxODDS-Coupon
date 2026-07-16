@@ -15,9 +15,9 @@
       "title": "Authenticated TxLINE Devnet schema and terminal/correction semantics",
       "owner": "txline-integration",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/implementation-verification.md: authenticated Devnet HTTP 200 and seven schema-valid fixtures; terminal/correction capture remains pending"
+        "docs/implementation-verification.md: redacted authenticated 14-day validation parsed 21,757 PascalCase records from 20 fixtures with zero failures, including 156 goals, 273 correction/VAR records, and 20 finalizations"
       ]
     },
     {
@@ -40,12 +40,12 @@
     },
     {
       "id": "RB-5",
-      "title": "Managed Devnet RPC and WebSocket capacity selection",
+      "title": "Devnet RPC and WebSocket capacity decision",
       "owner": "platform-operations",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: Foundation public Devnet targeted acceptance passed, broad account scan returned HTTP 429, and targeted fallback was validated; managed provider selection remains pending"
+        "docs/devnet-deployment.json: requester selected Foundation public Devnet RPC for the MVP; targeted acceptance passed, broad scans are disabled/fallback-safe, and scale settlement remains independently gated by RB-4"
       ]
     },
     {
@@ -53,9 +53,9 @@
       "title": "Eight-hour hard-timeout and postponed-match product approval",
       "owner": "product",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: deployed provider completion/refund/release path passed; local-validator hard-timeout path passed, but eight-hour product approval remains pending"
+        "architecture.md Q9: requester authorized documented assumptions; eight-hour timeout and refund-on-postponement are adopted, while deployed provider completion/refund/release and local-validator hard-timeout paths both passed"
       ]
     },
     {
@@ -63,9 +63,9 @@
       "title": "Valueless classic SPL demo mint, faucet, and no-freeze policy",
       "owner": "platform-operations",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: deployed classic six-decimal no-freeze valueless mint and funded demo; faucet/public policy review remains pending"
+        "docs/devnet-deployment.json: classic six-decimal no-freeze valueless mint plus wallet-signed, one-distribution, 500-GOAL Devnet faucet passed on chain and duplicate use returned HTTP 409"
       ]
     },
     {
@@ -73,9 +73,9 @@
       "title": "Instant Demo signer containment and judge Quickstart review",
       "owner": "security-web",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: in-memory Instant Demo registration, claim, transfer, completion/refund/release, and fresh reset confirmed; physical-browser containment and Quickstart review remain pending"
+        "docs/implementation-verification.md: production browser proved Instant Demo key absent from persistent storage and destroyed on reload; repository audit blocks private-key persistence; real registration/claim/transfer/reset path already passed"
       ]
     }
   ]

@@ -95,27 +95,8 @@ function StandardSolanaLayer({ children }: { children: ReactNode }) {
 function FanSignerProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const [instant, setInstant] = useState<Keypair | null>(null);
-  useEffect(() => {
-    const stored = sessionStorage.getItem("goaldrop.instant-demo-key");
-    if (stored) {
-      const frame = requestAnimationFrame(() => {
-        try {
-          setInstant(Keypair.fromSecretKey(fromBase64(stored)));
-        } catch {
-          sessionStorage.removeItem("goaldrop.instant-demo-key");
-        }
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-    return undefined;
-  }, []);
   const connectInstantDemo = useCallback(() => {
-    const keypair = Keypair.generate();
-    sessionStorage.setItem(
-      "goaldrop.instant-demo-key",
-      toBase64(keypair.secretKey),
-    );
-    setInstant(keypair);
+    setInstant(Keypair.generate());
   }, []);
   const signDigest = useCallback(
     async (digest: Uint8Array) => {
@@ -140,7 +121,7 @@ function FanSignerProvider({ children }: { children: ReactNode }) {
   );
   const disconnect = useCallback(async () => {
     if (instant) {
-      sessionStorage.removeItem("goaldrop.instant-demo-key");
+      instant.secretKey.fill(0);
       setInstant(null);
     }
     if (wallet.connected) await wallet.disconnect();
@@ -259,10 +240,4 @@ export function WalletChoices() {
 
 function shortAddress(address: string): string {
   return address ? `${address.slice(0, 4)}…${address.slice(-4)}` : "";
-}
-function fromBase64(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
-}
-function toBase64(value: Uint8Array): string {
-  return btoa(String.fromCharCode(...value));
 }

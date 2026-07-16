@@ -41,7 +41,7 @@
   "feePayer": {
     "address": "AZg8a2ii3AiVuVFXJQU4M9T4KuUGoCQ8vLdiZyEWA7Xi",
     "admissionThresholdLamports": 500000000,
-    "validatedBalanceLamports": 746507670,
+    "validatedBalanceLamports": 744458170,
     "worstCaseDemoRentLamports": 104922000,
     "scope": "three-round, fifteen-winner pre-seeded Devnet demo only"
   },
@@ -131,6 +131,14 @@
       "destinationTokenAccount": "DaotPcp8GmgMyqHPfDCFfzTW4CcF6sUnj257bEkf2a6H",
       "amountBaseUnits": "1000000",
       "destinationBalanceBaseUnits": "1000000"
+    },
+    "demoFaucet": {
+      "policy": "one wallet-signed distribution per sponsor wallet",
+      "wallet": "Fpj8xKNMqPkeE8oEWE1pAzVVghZ3uYNUx677GRy2jdoB",
+      "tokenAccount": "7PcgpJE2xJ9Atk54yU6bi2BzspuiL6BhYdrP5doTP9f",
+      "amountBaseUnits": "500000000",
+      "signature": "5bpC5EjxusmMbLz4RWh66KuJsDfFeMzvg1XitRp4Q4eLB67TVBTaXu1S8X1v4nJuPD2NTfUxBP46E72CLJLtUUrR",
+      "duplicateBuildHttpStatus": 409
     },
     "accountingAfterAcceptance": {
       "fundedBaseUnits": "15000000",
