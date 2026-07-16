@@ -53,6 +53,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
   useEffect(() => {
     const appId = process.env.NEXT_PUBLIC_PASSKEY_APP_ID;
+    const deploymentTier = process.env.NEXT_PUBLIC_DEPLOYMENT_TIER ?? "devnet";
+    if (deploymentTier === "production" && !appId)
+      throw new Error(
+        "NEXT_PUBLIC_PASSKEY_APP_ID is required for production deployments",
+      );
     const frame = requestAnimationFrame(() => {
       setEmbeddedWallet(
         createWallet({

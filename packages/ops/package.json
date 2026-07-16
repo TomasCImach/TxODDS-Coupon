@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark:devnet": "tsx src/benchmark-devnet.ts",
+    "benchmark:cleanup-wallets": "tsx src/cleanup-benchmark-wallets.ts",
+    "benchmark:collect-evidence": "tsx src/collect-benchmark-evidence.ts",
+    "benchmark:probe-rpc": "tsx src/probe-devnet-rpc.ts",
+    "benchmark:recover": "tsx src/recover-benchmark.ts",
     "mint:create": "tsx src/create-demo-mint.ts",
     "campaign:prepare-demo": "tsx src/prepare-demo-campaign.ts",
     "program:initialize": "tsx src/initialize-program.ts",

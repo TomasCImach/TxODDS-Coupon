@@ -80,8 +80,8 @@ Work proceeds under these assumptions. A failed assumption requires the named fa
 | A6 | A single-region PostgreSQL primary can serialize a 500-request/five-second burst and durably acknowledge accepted claims below 500 ms p95. | Load test before the demo. Scale API instances horizontally but retain one database sequence row per round as the serialization point. |
 | A7 | Individual settlement transactions can pay 100 winners within the two-minute on-chain window under Devnet conditions. | Benchmark on local validator and Devnet. A two-claim batch is a measured optimization only; it is not assumed to fit before serialization and compute tests. |
 | A8 | A normal live campaign hard-expires eight hours after scheduled kickoff. | This covers regulation, extra time, shootout, and ordinary delays. A postponed or very long suspended fixture is refunded instead of following a rescheduled match. Demo campaigns use a shorter configured expiry. |
-| A9 | Public display of the minimum derived fixture state needed for the hackathon is permitted. | Keep a deployment kill switch. Until TxODDS confirms broader rights in writing, do not expose raw feeds, offer pass-through API access, or replay recorded TxLINE data publicly. |
-| A10 | Raw TxLINE payload storage is permitted only for short-lived operational diagnosis during the hackathon. | Encrypt it, restrict access, delete it after 24 hours, and retain only a digest plus normalized decision metadata. Disable raw retention if TxODDS does not approve it. |
+| A9 | Public display of the minimum derived fixture state needed for the hackathon is permitted. | Keep a deployment kill switch. The requester confirmed the required TxODDS permission is resolved; do not expose raw feeds, offer pass-through API access, or replay recorded TxLINE data publicly. |
+| A10 | Raw TxLINE payload storage is permitted only for short-lived operational diagnosis during the hackathon. | Encrypt it, restrict access, delete it after 24 hours, and retain only a digest plus normalized decision metadata. Keep raw retention disabled unless the approved scope explicitly requires it. |
 | A11 | Judges need a no-payment, no-extension, no-external-wallet path. | Ship a pre-funded campaign and a visibly labeled Devnet-only instant-demo signer generated in browser memory. The passkey and external-wallet paths remain the product paths and are shown in the video. |
 | A12 | The Devnet reward token has six decimals, no freeze authority, no financial value, and conspicuous demo labeling. | All amounts are still stored in integer base units. The UI never uses a dollar sign or implies that the token is redeemable. |
 | A13 | The pre-seeded Devnet demo campaign may use the operator wallet as sponsor, refund wallet, reward-mint authority, and fee payer. | This is limited to the valueless, operator-funded judge campaign. User-created sponsor campaigns still require their own sponsor signature, and Mainnet must split all four capabilities. |
@@ -130,7 +130,7 @@ The first update wins the idempotency race. Later confirmation, amendment, VAR, 
 
 **Research.** Solana exposes a native Ed25519 signature-verification precompile, and programs can inspect the transaction's instruction sysvar to bind a verified message to program logic. The passkey SDK advertises a Solana Wallet Standard provider; its public documentation also describes recovery, multi-device behavior, and key export. See [Solana precompiles](https://solana.com/docs/core/programs/precompiles), the [Passkeys Solana provider](https://passkeys.foundation/docs/api-reference/create-wallet), and [Passkeys FAQ](https://passkeys.foundation/docs/faq).
 
-**Suggested answer adopted.** The fan signs a short, deterministic, domain-separated intent digest. The relayer pays the fee and creates the transaction containing an Ed25519 verification instruction followed immediately by the GoalDrop instruction. The program recomputes the digest and inspects the verification instruction. The fan never needs SOL and the relayer cannot change campaign, round, wallet, recipient, nonce, or expiry after signing.
+**Suggested answer adopted.** The fan signs a short, deterministic, domain-separated intent digest. The relayer pays the fee and creates the transaction containing an Ed25519 verification instruction followed immediately by the GoalDrop instruction. The program recomputes the digest and inspects the verification instruction. The fan never needs SOL and the relayer cannot change campaign, round, wallet, recipient, nonce, or expiry after signing. Devnet uses the provider's sandbox/default configuration without an App ID; `NEXT_PUBLIC_PASSKEY_APP_ID` becomes mandatory only when `NEXT_PUBLIC_DEPLOYMENT_TIER=production`, and the production build fails closed if it is missing.
 
 ### Q6. How should first-come ordering interact with Solana limits and contention?
 
@@ -140,9 +140,9 @@ The first update wins the idempotency race. Later confirmation, amendment, VAR, 
 
 ### Q7. What may the public application expose or replay?
 
-**Research.** The hackathon requires a deployed consumer product but the official terms also prohibit redistribution, publication, sharing, or making TxODDS Data available and terminate the hackathon data licence at the hackathon's conclusion. This conflict needs written sponsor clarification. See the [hackathon terms](https://txline.txodds.com/documentation/legal/hackathon-terms) and [`hackathon.md`](./hackathon.md).
+**Research.** The hackathon requires a deployed consumer product but the official terms also prohibit redistribution, publication, sharing, or making TxODDS Data available and terminate the hackathon data licence at the hackathon's conclusion. This conflict required sponsor clarification. See the [hackathon terms](https://txline.txodds.com/documentation/legal/hackathon-terms) and [`hackathon.md`](./hackathon.md).
 
-**Suggested answer adopted.** Keep all TxLINE credentials and raw payloads in the trusted backend. Expose only minimal derived match identity, phase, score, and GoalDrop state needed by the experience. Use synthetic TxLINE-shaped demo events, not recorded public replay, unless TxODDS approves replay in writing. Add `TXLINE_PUBLIC_OUTPUT_ENABLED` and `TXLINE_RAW_RETENTION_ENABLED` kill switches and a post-hackathon shutdown runbook.
+**Suggested answer adopted.** Keep all TxLINE credentials and raw payloads in the trusted backend. Expose only minimal derived match identity, phase, score, and GoalDrop state needed by the experience. Use synthetic TxLINE-shaped demo events, not recorded public replay, unless the confirmed permission expressly covers replay. Keep `TXLINE_PUBLIC_OUTPUT_ENABLED` and `TXLINE_RAW_RETENTION_ENABLED` kill switches and a post-hackathon shutdown runbook. The requester confirmed the required permission is resolved for the Devnet MVP; retain only secret-redacted evidence of that disposition.
 
 ### Q8. How can a judge test without buying tokens or establishing an external wallet?
 
@@ -1562,7 +1562,7 @@ No `.env` containing secrets is committed. Example environment files contain nam
 6. Apply PostgreSQL migrations.
 7. Deploy API and workers with public output disabled.
 8. Run internal live/synthetic integration and accounting reconciliation.
-9. Enable public output and Demo Mode.
+9. Enable public output and Demo Mode within the confirmed permission boundary.
 10. Run clean-browser judge acceptance and secret/log scan.
 
 Rollback means deploying the previous web/service image. A program rollback is an explicit program upgrade and must be tested; it is never attempted during an open round. If the program is suspect, pause new campaign/open/register/settle operations, preserve close/finalize/refund, and disclose the outage.
@@ -1632,7 +1632,7 @@ The `protocol` encoder has golden byte-vector tests shared with Rust so the brow
 - Verify Passkeys Solana `signMessage` and transaction signing on target browsers.
 - Deploy a minimal program that validates the exact fan intent through the Ed25519 precompile.
 - Serialize/simulate the complete single-claim transaction.
-- Obtain written TxODDS clarification for public derived display, raw retention, and synthetic/replayed demo behavior.
+- Retain the requester-confirmed TxODDS public-data disposition in secret-redacted release evidence and verify output/retention stay within it.
 
 No UI-heavy work should outrun these gates.
 
@@ -1711,13 +1711,13 @@ No UI-heavy work should outrun these gates.
 
 ## 23. Release-blocker ledger
 
-These do not prevent architecture definition, but any open item blocks claiming the deployed MVP is complete. The machine-readable current status and evidence live in `docs/release-blockers.json`; as of July 16, 2026, RB-2, RB-5, RB-6, RB-7, and RB-8 are resolved, while RB-1, RB-3, and RB-4 remain open:
+These do not prevent architecture definition, but any open item blocks claiming the deployed MVP is complete. The machine-readable current status and evidence live in `docs/release-blockers.json`; as of July 16, 2026, RB-1, RB-2, RB-4, RB-5, RB-6, RB-7, and RB-8 are resolved, while RB-3 remains open:
 
-1. **TxODDS written permission (open):** public derived display, caching/retention, and synthetic-vs-recorded demo behavior.
+1. **TxODDS written permission (resolved):** the requester confirmed the public derived-display, caching/retention, and synthetic-vs-recorded demo disposition is solved; only secret-redacted evidence may be retained in the repository.
 2. **Live schema validation (resolved):** authenticated PascalCase goal, status, confirmation, correction/VAR, and finalization records parse with zero failures in the recorded private validation window.
 3. **Passkey signing spike (open):** prove `solana:signMessage`, transaction signing, recovery, and export on the actual SDK version and physical demo devices.
-4. **Transaction benchmark (open):** prove serialized bytes, compute, contention, drain time, and retry behavior for 100 individual claims; decide whether the two-claim optimization is necessary.
-5. **RPC capacity (resolved for MVP):** the requester selected the Foundation public Devnet RPC; targeted reads/writes pass, broad scans degrade safely, and RB-4 separately gates settlement scale.
+4. **Transaction benchmark (resolved):** public Devnet settled 100 individually preflighted claims in 86.977 seconds with contiguous ranks/sequences, zero skips/retries, 970-byte transactions, and 42,223 CU p95; no two-claim optimization is needed.
+5. **RPC capacity (resolved for MVP):** the requester selected the Foundation public Devnet RPC; a paced 100-transaction capacity probe and the RB-4 100/100 settlement run pass, while broad and archival scans remain paced/fallback-safe.
 6. **Timeout approval (resolved):** the requester authorized documented assumptions, so kickoff plus eight hours and refund-on-postponement are adopted for the Devnet MVP.
 7. **Demo-token policy (resolved):** the published classic SPL mint is six-decimal, valueless, has no freeze authority, and has a wallet-signed one-use 500-GOAL faucet.
 8. **Judge Quickstart security review (resolved):** the Instant Demo signer is memory-only, disappears on reload/disconnect, and repository checks reject browser private-key persistence.
@@ -1772,7 +1772,7 @@ These do not prevent architecture definition, but any open item blocks claiming 
 
 ## 25. Final architectural definition
 
-The Devnet MVP is a mobile-first web application backed by a long-running TypeScript service, PostgreSQL, a managed Solana Devnet RPC, and one Anchor program. TxLINE's authenticated server-side score stream is normalized by a trusted listener. The first qualifying goal action for a stable fixture/action ID causes an authorized oracle to create one on-chain two-minute Round. Fans preregister and claim by signing domain-separated Ed25519 intents; a fee relayer pays their Solana fees. PostgreSQL durably assigns first-come receipt sequences, while the program processes those sequences contiguously, verifies fan authorization and eligibility, prevents duplicates and over-cap payouts, and transfers exact classic SPL rewards from a program-authorized vault.
+The Devnet MVP is a mobile-first web application backed by a long-running TypeScript service, PostgreSQL, a public Solana Devnet RPC, and one Anchor program. TxLINE's authenticated server-side score stream is normalized by a trusted listener. The first qualifying goal action for a stable fixture/action ID causes an authorized oracle to create one on-chain two-minute Round. Fans preregister and claim by signing domain-separated Ed25519 intents; a fee relayer pays their Solana fees. PostgreSQL durably assigns first-come receipt sequences, while the program processes those sequences contiguously, verifies fan authorization and eligibility, prevents duplicates and over-cap payouts, and transfers exact classic SPL rewards from a program-authorized vault.
 
 Synthetic Demo Match events are permanently labeled but use the same on-chain economic path. Solana account state, not browser or database optimism, establishes confirmed winners. Match finalization or a permissionless hard timeout eventually makes the residual vault refundable only to the immutable sponsor refund wallet. The result is deliberately not trustless sports truth or trustless request ordering, but it is a complete, auditable, gasless, capped, and correctly custodied Devnet fan-reward MVP.
 

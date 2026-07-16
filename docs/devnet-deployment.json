@@ -41,7 +41,7 @@
   "feePayer": {
     "address": "AZg8a2ii3AiVuVFXJQU4M9T4KuUGoCQ8vLdiZyEWA7Xi",
     "admissionThresholdLamports": 500000000,
-    "validatedBalanceLamports": 744458170,
+    "validatedBalanceLamports": 725705454,
     "worstCaseDemoRentLamports": 104922000,
     "scope": "three-round, fifteen-winner pre-seeded Devnet demo only"
   },
@@ -139,6 +139,92 @@
       "amountBaseUnits": "500000000",
       "signature": "5bpC5EjxusmMbLz4RWh66KuJsDfFeMzvg1XitRp4Q4eLB67TVBTaXu1S8X1v4nJuPD2NTfUxBP46E72CLJLtUUrR",
       "duplicateBuildHttpStatus": 409
+    },
+    "publicRpcCapacityProbe": {
+      "rpc": "https://api.devnet.solana.com",
+      "transactionShape": "unique zero-lamport self-transfer plus memo, with RPC preflight",
+      "transactionCount": 100,
+      "confirmedCount": 100,
+      "wallTimeMs": 86869,
+      "pacingMs": 650,
+      "retryCount": 0,
+      "latencyMs": {
+        "min": 170,
+        "p50": 188,
+        "p95": 199,
+        "max": 1012
+      },
+      "lamportsSpent": 502000,
+      "lamportsMoved": 0,
+      "accountsCreated": 0
+    },
+    "claimBenchmark": {
+      "rpc": "https://api.devnet.solana.com",
+      "campaignNonce": "1784227000001",
+      "fixtureId": "9100784227000002",
+      "campaign": "4LFmsT4JjYqoYbXGY9EbkYU2ghSGR6Lvk1eKdiDb6pyn",
+      "round": "GwEgTw2d651vGSLdqqtjLbPvJeF8s3jn1nGF6axJLs9x",
+      "fixtureSlot": "27kEtiJGX2mKJQt9pthG2XZcGHpek1tK5uiXFgyjxus1",
+      "vault": "EgyUfoHg3msLyJQ52JqpJmjJnbauXdaAVyHUVUtTKgLQ",
+      "judgeCampaignTouched": false,
+      "fanKeyPolicy": "100 deterministic benchmark keypairs generated and retained only in process memory",
+      "registrationCount": 100,
+      "claimCount": 100,
+      "winnerCount": 100,
+      "nextSequence": 101,
+      "skippedSequenceCount": 0,
+      "contiguousSequences": true,
+      "contiguousWinnerRanks": true,
+      "rewardAmountBaseUnits": "1000000",
+      "fundedBaseUnits": "100000000",
+      "paidBaseUnits": "100000000",
+      "refundedBaseUnits": "0",
+      "vaultBalanceAfterClaimsBaseUnits": "0",
+      "observedProcessedDrainMs": 86977,
+      "observedTimedClaimRpcRetries": 0,
+      "evidenceCollectionRpcRetries": 152,
+      "firstClaimBlockTime": "2026-07-16T18:30:04Z",
+      "lastClaimBlockTime": "2026-07-16T18:31:30Z",
+      "onchainClaimDrainSeconds": 86,
+      "firstClaimSlot": 476731031,
+      "lastClaimSlot": 476731267,
+      "claimTransactionBytes": {
+        "min": 970,
+        "p50": 970,
+        "p95": 970,
+        "max": 970
+      },
+      "claimComputeUnits": {
+        "min": 33223,
+        "p50": 36223,
+        "p95": 42223,
+        "max": 46723
+      },
+      "firstClaimSignature": "2uKeNkfkvkKo4XH2JSe29snooQ6JdRbQghxmeAqNZecR7xkexUEFPFuBYqK44oGhoYrUWbztFGYrJq3q1Mww8Hep",
+      "lastClaimSignature": "24h7nfAyLw3cjaR5rjesy5bdQQ5X2CyWnZzre9YeEMaWRSiZ6858AH2XdR3YdrNr8ZYUJBD31tXWWwYkbgHAZueA",
+      "claimSignatureCount": 100,
+      "claimSignaturesSha256": "75a1962dc3e5f7ad88450684bf3efbe84e49f66adc6650d33afd2f6282d0ef66",
+      "terminalLifecycle": {
+        "markMatchCompleteSignature": "3QX7PzPZUwPAbAuowa6i8xqERjHeP5RuLZW4FwS8Jrsa4MatBmLQsnRnzQmn7ShqjaqJr7obCCf4B6VDf74Rxi8r",
+        "makeRefundableSignature": "3D1tWRUCMGpz9Xytgpz1cjV2z1gfYgBtYo4vQLMs2n9h9c3oDrfpTsJQUJ9PcTLsi8Twu2s9WBNfB3Q4cPHCxzfa",
+        "refundAndCloseVaultSignature": "TagqQ5qHc2EBxsBQGh2kZTAfkNpQT5sFuV1iCK26vJQeR5qVFEBgGybSpG1RgGUNzQBorVk5s7pnPuMbDkSD4Kw",
+        "releaseFixtureSlotSignature": "2WHjaeMc1c8UnQ7G74tW7ehfxDw5B5a6MLU7YBYN9jboiCDg9mancjpQWALTMEE3NbBGyGnwHyAGb1TfpEgLKvsX",
+        "campaignState": "refunded",
+        "vaultExists": false,
+        "fixtureSlotExists": false
+      },
+      "cleanup": {
+        "temporaryTokenAccountsClosed": 100,
+        "rewardBaseUnitsRecovered": "100000000",
+        "retryCount": 0,
+        "registrationAndClaimPdasRetainedAsAuditEvidence": true
+      },
+      "feePayerLamports": {
+        "benchmarkStart": 1144572745,
+        "claimPathTrough": 519382054,
+        "afterTerminalRecoveryAndCleanup": 725705454,
+        "safetyFloor": 500000000
+      }
     },
     "accountingAfterAcceptance": {
       "fundedBaseUnits": "15000000",

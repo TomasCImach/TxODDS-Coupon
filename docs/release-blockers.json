@@ -7,8 +7,10 @@
       "title": "TxLINE public derived-display, caching, and retention permission",
       "owner": "product-legal",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
-      "evidence": []
+      "status": "resolved",
+      "evidence": [
+        "architecture.md Q7 and A9-A10: requester confirmed the required TxODDS permission is solved; public output is limited to the approved minimal derived display, credentials and raw payloads remain server-only, raw retention stays disabled unless explicitly covered, and secret-redacted disposition evidence is required"
+      ]
     },
     {
       "id": "RB-2",
@@ -26,16 +28,18 @@
       "owner": "web-wallet",
       "dueGate": "before-public-devnet-release",
       "status": "open",
-      "evidence": []
+      "evidence": [
+        "Devnet builds do not require NEXT_PUBLIC_PASSKEY_APP_ID; production-tier builds fail closed without it. Physical message-signing, transaction-signing, recovery, export, disconnect/reconnect, and Quickstart coverage remains outstanding"
+      ]
     },
     {
       "id": "RB-4",
       "title": "Deployed claim compute, contention, drain-time, and retry benchmark",
       "owner": "solana-runtime",
       "dueGate": "before-public-devnet-release",
-      "status": "open",
+      "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: two deployed registration/claim/new-ATA/round-close seams plus fan-authorized transfer; contention and drain benchmark remain pending"
+        "docs/devnet-deployment.json acceptance.claimBenchmark: separate untouched-judge-campaign benchmark registered and settled exactly 100/100 winners over Foundation public Devnet RPC in 86.977 seconds with contiguous sequence/rank, zero timed claim retries, 970-byte claim transactions, p95 42,223 CU, exact 100,000,000-base-unit accounting, terminal recovery, vault closure, fixture release, and 100 temporary ATA closures"
       ]
     },
     {
@@ -45,7 +49,7 @@
       "dueGate": "before-public-devnet-release",
       "status": "resolved",
       "evidence": [
-        "docs/devnet-deployment.json: requester selected Foundation public Devnet RPC for the MVP; targeted acceptance passed, broad scans are disabled/fallback-safe, and scale settlement remains independently gated by RB-4"
+        "docs/devnet-deployment.json acceptance.publicRpcCapacityProbe and acceptance.claimBenchmark: requester selected Foundation public Devnet RPC; a 100-transaction paced preflight/write probe and the 100/100 settlement benchmark passed, while archive/history reads are paced and broad scans remain fallback-safe"
       ]
     },
     {

@@ -11,6 +11,14 @@ const browserApiOrigin = (() => {
   }
 })();
 
+const deploymentTier = process.env.NEXT_PUBLIC_DEPLOYMENT_TIER ?? "devnet";
+if (!["devnet", "production"].includes(deploymentTier))
+  throw new Error("NEXT_PUBLIC_DEPLOYMENT_TIER must be devnet or production");
+if (deploymentTier === "production" && !process.env.NEXT_PUBLIC_PASSKEY_APP_ID)
+  throw new Error(
+    "NEXT_PUBLIC_PASSKEY_APP_ID is required for production deployments",
+  );
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
