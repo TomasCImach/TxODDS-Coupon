@@ -1,0 +1,275 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { useFanSigner } from "../app/providers";
+import { browserApiOrigin } from "../lib/api";
+import { track } from "../lib/analytics";
+import { formatTokenAmount, parseTokenAmount } from "../lib/token-amount";
+
+interface RewardView {
+  balance: string;
+  decimals: number;
+  tokenAccount: string;
+  claims: {
+    round: string;
+    amount: string;
+    winnerRank: number;
+    explorer: string;
+  }[];
+}
+interface TransferReview {
+  destination: string;
+  amount: string;
+  baseUnits: bigint;
+}
+
+export function TransferPanel() {
+  const signer = useFanSigner();
+  const [rewards, setRewards] = useState<RewardView | null>(null);
+  const [destination, setDestination] = useState("");
+  const [amount, setAmount] = useState("");
+  const [status, setStatus] = useState(
+    "Confirmed rewards are held in your own classic SPL token account.",
+  );
+  const [busy, setBusy] = useState(false);
+  const [review, setReview] = useState<TransferReview | null>(null);
+
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!signer.address) return;
+      const response = await fetch(
+        `${browserApiOrigin}/v1/wallets/${signer.address}/rewards`,
+        { cache: "no-store", signal },
+      );
+      if (response.ok) setRewards((await response.json()) as RewardView);
+    },
+    [signer.address],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      void refresh(controller.signal).catch(() => undefined);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      controller.abort();
+    };
+  }, [refresh]);
+
+  if (!signer.address) return null;
+  const decimals =
+    rewards?.decimals ?? Number(process.env.NEXT_PUBLIC_REWARD_DECIMALS ?? 6);
+  const balance = rewards
+    ? formatTokenAmount(BigInt(rewards.balance), decimals)
+    : "—";
+
+  const transfer = async () => {
+    if (!review) return;
+    if (!signer.canSignTransaction) {
+      setStatus("This wallet cannot sign a token transfer transaction.");
+      return;
+    }
+    setBusy(true);
+    try {
+      track("transfer_started", {
+        properties: { amount_base_units: review.baseUnits.toString() },
+      });
+      const built = await json<{ templateId: string; transaction: string }>(
+        "/v1/transfers/build",
+        {
+          wallet: signer.address,
+          destination: review.destination,
+          amount: review.baseUnits.toString(),
+        },
+      );
+      const transaction = VersionedTransaction.deserialize(
+        fromBase64(built.transaction),
+      );
+      const signed = await signer.signTransaction(transaction);
+      const submitted = await json<{ signature: string; explorer: string }>(
+        "/v1/transfers/submit",
+        {
+          templateId: built.templateId,
+          signedTransaction: toBase64(signed.serialize()),
+        },
+      );
+      setStatus(`Transfer confirmed: ${short(submitted.signature)}`);
+      track("transfer_completed", {
+        properties: { amount_base_units: review.baseUnits.toString() },
+      });
+      setAmount("");
+      setDestination("");
+      setReview(null);
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Transfer failed");
+      track("product_error", {
+        properties: {
+          surface: "reward_transfer",
+          error_code: "transfer_failed",
+        },
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const prepareReview = () => {
+    try {
+      const destinationKey = new PublicKey(destination);
+      if (destinationKey.toBase58() === signer.address)
+        throw new Error("Choose a destination other than this wallet");
+      const baseUnits = parseTokenAmount(amount, decimals);
+      if (baseUnits <= 0n) throw new Error("Enter a positive transfer amount");
+      if (rewards && baseUnits > BigInt(rewards.balance))
+        throw new Error("Transfer amount exceeds confirmed balance");
+      setReview({ destination: destinationKey.toBase58(), amount, baseUnits });
+      setStatus(
+        "Review every locked field below, then explicitly confirm in your wallet.",
+      );
+    } catch (error) {
+      setReview(null);
+      setStatus(
+        error instanceof Error ? error.message : "Transfer details are invalid",
+      );
+    }
+  };
+
+  return (
+    <section className="reward-wallet">
+      <div className="reward-summary">
+        <p className="section-kicker">Your Devnet reward wallet</p>
+        <h2>
+          {balance} <small>GOAL</small>
+        </h2>
+        <p>
+          Fan-owned balance · {rewards?.claims.length ?? 0} confirmed payout
+          {rewards?.claims.length === 1 ? "" : "s"}
+        </p>
+        {rewards?.tokenAccount ? (
+          <a
+            className="proof-link"
+            href={`https://explorer.solana.com/address/${rewards.tokenAccount}?cluster=devnet`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Inspect token account ↗
+          </a>
+        ) : null}
+      </div>
+      <div className="transfer-form">
+        <h3>Transfer your reward</h3>
+        <p>
+          The destination, exact GOAL amount, and mint are locked before your
+          wallet signs. The platform only pays the Devnet fee.
+        </p>
+        <label className="input-label">
+          Destination Solana address
+          <input
+            className="field"
+            value={destination}
+            onChange={(event) => {
+              setDestination(event.target.value.trim());
+              setReview(null);
+            }}
+            placeholder="Recipient wallet"
+          />
+        </label>
+        <label className="input-label">
+          Amount in GOAL
+          <input
+            className="field"
+            inputMode="decimal"
+            value={amount}
+            onChange={(event) => {
+              setAmount(event.target.value);
+              setReview(null);
+            }}
+            placeholder="0.00"
+          />
+        </label>
+        {review ? (
+          <div className="transfer-review">
+            <p className="section-kicker">Explicit transfer confirmation</p>
+            <dl>
+              <div>
+                <dt>Token</dt>
+                <dd>GOAL · classic SPL</dd>
+              </div>
+              <div>
+                <dt>Amount</dt>
+                <dd>{review.amount} GOAL</dd>
+              </div>
+              <div>
+                <dt>Network</dt>
+                <dd>Solana Devnet</dd>
+              </div>
+              <div>
+                <dt>Destination</dt>
+                <dd>
+                  <code>{review.destination}</code>
+                </dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              className="primary-button full"
+              disabled={busy}
+              onClick={() => void transfer()}
+            >
+              {busy ? "Confirming transfer…" : "Confirm these fields in wallet"}
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy}
+              onClick={() => setReview(null)}
+            >
+              Edit transfer
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="secondary-button full"
+            disabled={
+              busy ||
+              !destination ||
+              !amount ||
+              !rewards ||
+              BigInt(rewards.balance) === 0n
+            }
+            onClick={prepareReview}
+          >
+            Review transfer
+          </button>
+        )}
+        <p className="dashboard-status" aria-live="polite">
+          {status}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+async function json<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(`${browserApiOrigin}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json()) as T & { message?: string };
+  if (!response.ok) throw new Error(body.message ?? "Transfer request failed");
+  return body;
+}
+function fromBase64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+}
+function toBase64(value: Uint8Array): string {
+  return btoa(String.fromCharCode(...value));
+}
+function short(value: string): string {
+  return `${value.slice(0, 7)}…${value.slice(-5)}`;
+}

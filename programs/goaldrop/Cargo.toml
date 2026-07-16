@@ -1,0 +1,27 @@
+[package]
+name = "goaldrop"
+version = "0.1.0"
+description = "GoalDrop Devnet MVP economic and eligibility program"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "goaldrop"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+
+[dependencies]
+anchor-lang = "0.32.1"
+anchor-spl = { version = "0.32.1", features = ["associated_token", "token"] }
+solana-sdk-ids = "2.2.1"
+solana-sha256-hasher = "2.3.0"

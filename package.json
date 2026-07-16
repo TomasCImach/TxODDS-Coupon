@@ -1,0 +1,40 @@
+{
+  "name": "goaldrop",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm --parallel --filter @goaldrop/web --filter @goaldrop/service dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "pnpm -r --if-present lint",
+    "release:check": "node scripts/release-readiness.mjs",
+    "security:audit": "node scripts/repository-audit.mjs",
+    "test": "pnpm -r --if-present test",
+    "test:unit": "pnpm -r --if-present test:unit",
+    "test:anchor": "vitest run tests/onchain.integration.test.ts --testTimeout=120000",
+    "test:load": "pnpm --filter @goaldrop/service test:load",
+    "typecheck": "pnpm -r --filter './packages/**' --if-present build && pnpm -r --if-present typecheck",
+    "verify": "pnpm format:check && pnpm lint && pnpm security:audit && pnpm typecheck && pnpm test && pnpm build",
+    "db:migrate": "pnpm --filter @goaldrop/db migrate",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@goaldrop/protocol": "workspace:*",
+    "@goaldrop/solana-client": "workspace:*",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.98.4",
+    "@types/node": "26.1.1",
+    "eslint": "9.39.5",
+    "prettier": "3.9.5",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "tweetnacl": "1.0.3"
+  }
+}

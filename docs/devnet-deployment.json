@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "cluster": "solana:devnet",
+  "genesisHash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "validatedRpc": "https://api.devnet.solana.com",
+  "alternateValidatedRpc": "https://solana-devnet.api.onfinality.io/public",
+  "program": {
+    "address": "2NUW8WnPJpsSruWhQ5as8AeynBDdfhth5YBXpFWfxZnc",
+    "programData": "F43viwT6uscQujyAHusyRwDdpZ5JnWU1Aprw2eLbBh6G",
+    "upgradeAuthority": "GRmXz1P78F6Ri6jMT8u1iFkfVd11oFiBviiogqHN3Qo2",
+    "binarySha256": "38d357afe50b88acd63768167a9e4ed30df4c9784a9f42c43581b2662cc04d33",
+    "binaryLength": 602064,
+    "deploymentSignature": "5Q4moHUs1k2v5grAZ4mhv8BEvBP1UgYRTksrMBBr4WF6FBJntMq8aMvRckKzRSQ5ARGjf6mwa5PrY9ohpU2afjnG",
+    "deploymentSlot": 476689887,
+    "buildToolchain": {
+      "anchor": "0.32.1",
+      "sbfAgave": "2.3",
+      "observedGlobalSolanaCli": "4.1.2",
+      "decision": "The pinned Anchor/Agave SBF path is authoritative for reproducible program builds; the newer global CLI is limited to compatible RPC and deployment operations."
+    }
+  },
+  "platformConfig": {
+    "address": "9FiSYwn6w3fVL7woiEj6JoFoy7AehAatXDngUE5hpWKj",
+    "administrator": "CpzXKbjbXfeacg4fmYm837MaMqu3HPeBLyXmLeCVnLFa",
+    "oracle": "55gpu7u45VNCckEttJMxmfz9uVwNokYoxZ5LuuD48AZ2",
+    "relayer": "F9My9tCJrXg9foogr8CSJJzadvv9Uq6bVZxcZuY4exdr",
+    "demoAuthority": "6dPRNKsHj5K6axssE5isAuHdrR1BRWzyHogApWtRFgwf",
+    "initializationSignature": "hwLF1MaVNHCMZ7MhFya67NJg2vR3cXM4mUSyEQoUBdd5VXzaDWSBXZWBc1zcgnW9nArNRe7aXUA7g9Bz6v6zCQj",
+    "initializationSlot": 476690252
+  },
+  "rewardMint": {
+    "address": "DLuTq3uk8PrjWJ33d9M5QaGpD5D9zektuYdrGuEXUAUK",
+    "operatorTokenAccount": "9GuVF63C9peKn1XZ1qcApwBKE3xgWVGYSL1UPjtuJi36",
+    "operator": "AZg8a2ii3AiVuVFXJQU4M9T4KuUGoCQ8vLdiZyEWA7Xi",
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "decimals": 6,
+    "freezeAuthority": null,
+    "mintSignature": "1Bmo2CSUEX2UVsKuNkMy5FP4QQG7qigpch3u5h7jMvXi37voMtcTkDUvs5Z9H2rnhRLvf38z34M33C4mr4NovNw",
+    "mintSlot": 476685912
+  },
+  "feePayer": {
+    "address": "AZg8a2ii3AiVuVFXJQU4M9T4KuUGoCQ8vLdiZyEWA7Xi",
+    "admissionThresholdLamports": 500000000,
+    "validatedBalanceLamports": 746507670,
+    "worstCaseDemoRentLamports": 104922000,
+    "scope": "three-round, fifteen-winner pre-seeded Devnet demo only"
+  },
+  "demoCampaign": {
+    "address": "33cyjJGZGFA4MZtzmV2t2B726h3so4psybKTKprMv2mT",
+    "fixtureSlot": "BYV6EeDqtWVXfjCk1L3b9nKAZq8Uqi9yTFPAqBXESiij",
+    "vault": "4SRcVUiDyhmUhatyHcYHGb8mC82T8zGiPSzXYjAXcRVo",
+    "sponsor": "AZg8a2ii3AiVuVFXJQU4M9T4KuUGoCQ8vLdiZyEWA7Xi",
+    "fixtureId": "9000001784301517",
+    "campaignNonce": "1784301517",
+    "scheduledStart": "1784301517",
+    "registrationDeadline": "1784301517",
+    "expectedEnd": "1784312317",
+    "hardExpiry": "1784330317",
+    "roundCount": 3,
+    "rewardAmountBaseUnits": "1000000",
+    "winnerCap": 5,
+    "requiredFundingBaseUnits": "15000000",
+    "createSignature": "2UALAmEr8kPFnWT73skeVd8BGgdN53N3erDuwvTuNWHFkBcSsusckL6shjbBmRdKAfi8bbPy8fHK2LNfSPH7k4GP",
+    "fundSignature": "nr8QkEqE6D7wYjKmsN8bMfZjEmQensYJQrBvvo1e76C9G61WpeoapVpdB5hVupVkC1zVTYchQKrVkVPry242W32",
+    "activateSignature": "2gPADUwMNVHgoHWKjUbzHPyTPm4ePUwouaS5G5ftR3NQLbpTowdhBtZ1gDtEbemjJRwg2uXLsxTdCHApokQAsPBf",
+    "activateSlot": 476699738
+  },
+  "acceptance": {
+    "completedLifecycleCampaign": {
+      "address": "8bekQRyXXMrw4gvTgKAJs1fVtj2fzGRS8Vpkxn6hEa4y",
+      "fixtureSlot": "5fsDofr55EH3iDHvr3wXZtQMYEne2MAZMA9uKT99wW1V",
+      "vault": "YogfGtDxjNJEPhyjuJQWCg87c38jqFkJn7dSGyWj3mR",
+      "overlappingRounds": [
+        {
+          "address": "24g5RmKXCvRGBPGqJjzWpmMrbu2hjapNUshseWrs2vSy",
+          "goalReceipt": "2cxZjTdfNSU2k4Wc5AFhiMieyymV9Vro5oG6hGSeq5yi",
+          "openSignature": "5DsRCSUQM5JqBuoG4q2c3XPqVngh7n9z38niYMmLBpoUxpT5X7SYUHPmsUVXBM6nhoBfzEQjPNKVUmVb1HnSmrj9",
+          "closeSignature": "2cQAkhMgYReJREBBS77qqF34vijqyDyyi3DwzFHW3ooZwe6egJx4Yry8dP8VvwMoH5QWV3xLmQCvAoBSgNu6wzm7"
+        },
+        {
+          "address": "H1v9pSHG6y2WgizruKmepCfPZfpDchSpwCH7JbRdAoEa",
+          "goalReceipt": "gt21Tyu9poVkD6P9PAdcVZnW7fahE7uVaGkprUqbkpj",
+          "openSignature": "43dTqvMS2hjxcRbrFqJnzomQY7TdD53VKFMcc486eXDosyUDF2QWhfedEvQbWaoFe7Xzij1MbZMqJD1sFeLdXLi6",
+          "closeSignature": "anvQeSqduELQeE3jrFkLPq5GLAh9EPRLHamHXGMq44x4zrF39JbJEtLWVbCV848Z2QmxKMvh3veCqMbztyJA7GF"
+        }
+      ],
+      "markMatchCompleteSignature": "2qK3qWGCKshGXAwxXyjFVdKPBT9disp9WRDhsCavq1AQJBgnWFHvNB7dq9jDQ4ogxtd672b9u3yBJyLMSfWDmzB2",
+      "makeRefundableSignature": "54aUUw2AKzsWricC6YvzWqSWWGKJrNG4qrbJgL12M1KKNijdLJZYTM5tJVcSduLmTRjxN7xT8LAbYezWjeDUQa2X",
+      "refundSignature": "5mkV31rUUhmTAsdqS1C1fsM3HjofHj4SBx7SDo8nRiv9UbN7Nw6KzzkokDGKxLeY6V3ZXoLvmHyETFbpL8AzZcRy",
+      "releaseFixtureSlotSignature": "3PfVWuTXAm5pCsyP4zSAZAwkpbARkfb3S6srtWArmCoosbaCf6DG1M89ZdFcSyYiPHqBtuZzc5fgJSAHY18hSDzc",
+      "fundedBaseUnits": "15000000",
+      "paidBaseUnits": "1000000",
+      "refundedBaseUnits": "14000000",
+      "externalInflowBaseUnits": "0",
+      "vaultExistsAfterRefund": false,
+      "fixtureSlotExistsAfterRelease": false
+    },
+    "acceptanceCampaign": {
+      "address": "DCiiAeCFEhLDWuio8V6cAycndTgZTcdUu1KBCn4gQvu8",
+      "fixtureSlot": "6RWUbqfECWAZ36w2Xhz9xYV2MnDudX8hs2SdGqUgYrhC",
+      "vault": "7DwZfFMog6Pr4y54UpMpZBV7etvSpZFRmY292s5r4HAx",
+      "createSignature": "ApzqqJbJBbp6Wg28W1PqhUYQVwGF9SE56HApfk1zTMCeDHah2Y5PMVD6Q33yDY2vyH3oeFLBzBYrk8qLhRwbgVC",
+      "fundSignature": "5m7QY9E5arFwZv1JN4DPNzSoV4eSBHVUBgayU1Z1r3raTNTyPhXUAN9QnvUgMxAKUUZU3iisyCF2GvAyAXBk3dz",
+      "activateSignature": "4gUZWkQTkMgj6T17kc9wdL7bwpCNwbuhG8QMYD999zrGvYj2BUSsz6niRG2u5YtnGPaYGkchZfnxuB1CaPVyQr3X"
+    },
+    "syntheticRound": {
+      "address": "gmiMsUXB8bx74sJcM52BsCZtBT6FVFchiKsrnaNdcHK",
+      "goalReceipt": "GJxbCSYRLyac4sH7Hrxwq9hHZPADpa8tok2paMn2LfBu",
+      "openSignature": "4wkPzkf9eCdQN5vKoH1R7TXo2jch185EJtSPost2pEM4VJDAM5oyARpC1xscFQvweRP2W5hiMjsG3kiQkG1Jxszn",
+      "source": "demo",
+      "closeSignature": "5FCXAH5PJWVjtmTFSjcfT4pMR7CJwCCPLPaKmeykcePUGdeob4NZEGRfh47vcKK6C4SKEH4mPtb2s7scnGvgLC8Z",
+      "terminalState": "expired",
+      "winnerCount": 1,
+      "paidBaseUnits": "1000000"
+    },
+    "instantDemoFan": {
+      "wallet": "HQ5QLZkGHXbLh8y2GS3Ze3GZ1qv111SEocsfyseR5yLh",
+      "registrationPda": "9N3q8ZWCskhGzJRBEB2qyU1995c34bnnJH6YH4StTnpZ",
+      "registrationSignature": "5Vyj7oeWUQqrLoukGTEFCu2tdZzAWBdhu9EXuEDb4cGuMVukUkmmWgDVmTkGRbhSXvTRgytRLGeXnaNUDGq8pTbg",
+      "claimPda": "j2aNNoxEAXpR2YAEyVMk4escH7f5aCuuhVY3Sz5bDpV",
+      "claimSignature": "PuGd7ZvsirR9bmwSffpWcLdbTR8YmBPuzsDH73RzB6Qig7ELsnfxriKLCAReqMGADu33RT9CWJbW12K5RQsBY88",
+      "receiptSequence": "1",
+      "winnerRank": 1,
+      "tokenAccount": "A3WMxxVf8coZ1MkrTzzoukpxPoH11KP671YqzN8VLsM7",
+      "tokenBalanceBeforeTransferBaseUnits": "1000000",
+      "tokenBalanceAfterTransferBaseUnits": "0"
+    },
+    "rewardTransfer": {
+      "signature": "4iZoRwpvU8g5y8XdqGzUyHvWeFWfomvDNq5ZAnpEYVD3hQYm73y6dR1v6zNhNtSNgawM1QpPyN3j8qaEqWmDRQu",
+      "destinationWallet": "8Vbyx9qBpihs4exYP4HiDTDCrBXM3sj53DstbU9QrRXi",
+      "destinationTokenAccount": "DaotPcp8GmgMyqHPfDCFfzTW4CcF6sUnj257bEkf2a6H",
+      "amountBaseUnits": "1000000",
+      "destinationBalanceBaseUnits": "1000000"
+    },
+    "accountingAfterAcceptance": {
+      "fundedBaseUnits": "15000000",
+      "paidBaseUnits": "1000000",
+      "vaultBaseUnits": "14000000",
+      "refundedBaseUnits": "0",
+      "externalInflowBaseUnits": "0"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+target
+test-ledger
+pnpm-lock.yaml
+architecture.md
+PRD.md
+hackathon.md

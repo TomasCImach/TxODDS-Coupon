@@ -1,0 +1,29 @@
+{
+  "name": "@goaldrop/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "test:unit": "vitest run src",
+    "migrate": "tsx src/migrate-cli.ts"
+  },
+  "dependencies": {
+    "@goaldrop/protocol": "workspace:*",
+    "@noble/hashes": "2.2.0",
+    "bs58": "6.0.0",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0",
+    "tweetnacl": "1.0.3"
+  }
+}

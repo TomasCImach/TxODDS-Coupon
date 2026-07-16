@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public Solana token-account addresses in deployment evidence"
+regexTarget = "match"
+regexes = [
+  '''(?:operatorTokenAccount|tokenAccount|destinationTokenAccount)"\s*:\s*"[1-9A-HJ-NP-Za-km-z]{32,44}"''',
+]

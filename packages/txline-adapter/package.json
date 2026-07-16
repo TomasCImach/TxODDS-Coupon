@@ -1,0 +1,23 @@
+{
+  "name": "@goaldrop/txline-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "test:unit": "vitest run src"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0",
+    "eventsource-parser": "3.1.0",
+    "zod": "4.4.3"
+  }
+}

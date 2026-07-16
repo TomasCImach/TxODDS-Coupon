@@ -1,0 +1,68 @@
+x-service: &service
+  build:
+    context: .
+    dockerfile: apps/service/Dockerfile
+  env_file: .env
+  environment:
+    DATABASE_URL: postgres://goaldrop:goaldrop@postgres:5432/goaldrop
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    extends:
+      file: compose.yaml
+      service: postgres
+
+  api:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "api"]
+    ports: ["4000:4000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/internal/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  txline-listener:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "txline-listener"]
+
+  oracle-worker:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "oracle-worker"]
+
+  settlement-worker:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "settlement-worker"]
+
+  chain-indexer:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "chain-indexer"]
+
+  demo-controller:
+    <<: *service
+    command: ["node", "apps/service/dist/cli.js", "demo-controller"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN}
+        NEXT_PUBLIC_WEB_ORIGIN: ${NEXT_PUBLIC_WEB_ORIGIN}
+        NEXT_PUBLIC_SOLANA_RPC_URL: ${NEXT_PUBLIC_SOLANA_RPC_URL}
+        NEXT_PUBLIC_REWARD_MINT: ${NEXT_PUBLIC_REWARD_MINT}
+        NEXT_PUBLIC_REWARD_DECIMALS: ${NEXT_PUBLIC_REWARD_DECIMALS:-6}
+        NEXT_PUBLIC_PASSKEY_APP_ID: ${NEXT_PUBLIC_PASSKEY_APP_ID}
+        NEXT_PUBLIC_DEMO_CAMPAIGN: ${NEXT_PUBLIC_DEMO_CAMPAIGN}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports: ["3000:3000"]
+    restart: unless-stopped
+
+volumes:
+  goaldrop-postgres:

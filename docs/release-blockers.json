@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "scope": "public-solana-devnet-mvp",
+  "blockers": [
+    {
+      "id": "RB-1",
+      "title": "TxLINE public derived-display, caching, and retention permission",
+      "owner": "product-legal",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": []
+    },
+    {
+      "id": "RB-2",
+      "title": "Authenticated TxLINE Devnet schema and terminal/correction semantics",
+      "owner": "txline-integration",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/implementation-verification.md: authenticated Devnet HTTP 200 and seven schema-valid fixtures; terminal/correction capture remains pending"
+      ]
+    },
+    {
+      "id": "RB-3",
+      "title": "Passkey SDK message/transaction/recovery/export device matrix",
+      "owner": "web-wallet",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": []
+    },
+    {
+      "id": "RB-4",
+      "title": "Deployed claim compute, contention, drain-time, and retry benchmark",
+      "owner": "solana-runtime",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/devnet-deployment.json: two deployed registration/claim/new-ATA/round-close seams plus fan-authorized transfer; contention and drain benchmark remain pending"
+      ]
+    },
+    {
+      "id": "RB-5",
+      "title": "Managed Devnet RPC and WebSocket capacity selection",
+      "owner": "platform-operations",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/devnet-deployment.json: Foundation public Devnet targeted acceptance passed, broad account scan returned HTTP 429, and targeted fallback was validated; managed provider selection remains pending"
+      ]
+    },
+    {
+      "id": "RB-6",
+      "title": "Eight-hour hard-timeout and postponed-match product approval",
+      "owner": "product",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/devnet-deployment.json: deployed provider completion/refund/release path passed; local-validator hard-timeout path passed, but eight-hour product approval remains pending"
+      ]
+    },
+    {
+      "id": "RB-7",
+      "title": "Valueless classic SPL demo mint, faucet, and no-freeze policy",
+      "owner": "platform-operations",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/devnet-deployment.json: deployed classic six-decimal no-freeze valueless mint and funded demo; faucet/public policy review remains pending"
+      ]
+    },
+    {
+      "id": "RB-8",
+      "title": "Instant Demo signer containment and judge Quickstart review",
+      "owner": "security-web",
+      "dueGate": "before-public-devnet-release",
+      "status": "open",
+      "evidence": [
+        "docs/devnet-deployment.json: in-memory Instant Demo registration, claim, transfer, completion/refund/release, and fresh reset confirmed; physical-browser containment and Quickstart review remain pending"
+      ]
+    }
+  ]
+}

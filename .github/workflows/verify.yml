@@ -1,0 +1,91 @@
+name: Verify Devnet MVP
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: goaldrop
+          POSTGRES_PASSWORD: goaldrop
+          POSTGRES_DB: goaldrop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goaldrop -d goaldrop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://goaldrop:goaldrop@127.0.0.1:5432/goaldrop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+      - run: pnpm verify
+      - run: pnpm test:load
+
+  program-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.89.0 --profile minimal --no-self-update
+      - run: cargo +1.89.0 test -p goaldrop --all-targets --locked
+
+  program-sbf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @goaldrop/protocol build
+      - run: pnpm --filter @goaldrop/solana-client build
+      - name: Install pinned Anchor and Agave binaries
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/anchor" \
+            https://github.com/coral-xyz/anchor/releases/download/v0.32.1/anchor-0.32.1-x86_64-unknown-linux-gnu
+          chmod +x "$RUNNER_TEMP/anchor"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/agave.tar.bz2" \
+            https://release.anza.xyz/v2.3.0/solana-release-x86_64-unknown-linux-gnu.tar.bz2
+          mkdir "$RUNNER_TEMP/agave"
+          tar -xjf "$RUNNER_TEMP/agave.tar.bz2" -C "$RUNNER_TEMP/agave"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/agave/solana-release/bin" >> "$GITHUB_PATH"
+      - name: Build SBF and execute fresh-validator seam
+        run: |
+          anchor build
+          mkdir -p target
+          solana-keygen new --no-bip39-passphrase --silent --outfile target/ci-wallet.json
+          anchor test --skip-build --provider.wallet "$PWD/target/ci-wallet.json"

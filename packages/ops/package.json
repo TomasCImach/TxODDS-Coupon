@@ -1,0 +1,29 @@
+{
+  "name": "@goaldrop/ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "mint:create": "tsx src/create-demo-mint.ts",
+    "campaign:prepare-demo": "tsx src/prepare-demo-campaign.ts",
+    "program:initialize": "tsx src/initialize-program.ts",
+    "program:pause": "tsx src/set-pause.ts",
+    "program:rotate": "tsx src/rotate-authority.ts",
+    "txline:activate": "tsx src/txline-activate.ts",
+    "validate:devnet": "tsx src/validate-devnet.ts",
+    "campaign:reconcile": "tsx src/reconcile-campaign.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@goaldrop/protocol": "workspace:*",
+    "@goaldrop/solana-client": "workspace:*",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.98.4",
+    "bs58": "6.0.0",
+    "tweetnacl": "1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  }
+}
