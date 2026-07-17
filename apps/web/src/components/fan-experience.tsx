@@ -44,6 +44,10 @@ export function FanExperience({
   const [now, setNow] = useState(() => Date.now());
   const [reducedMotion, setReducedMotion] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const registrationPollTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const registrationPollGeneration = useRef(0);
   const openingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const registrationStartedAt = useRef<number | null>(null);
   const claimStartedAt = useRef<number | null>(null);
@@ -194,40 +198,91 @@ export function FanExperience({
     return () => source.close();
   }, [campaign.campaign, signer.address, signer.mode]);
 
+  const beginRegistrationPoll = useCallback(
+    (wallet: string, retryNetworkErrors = false) => {
+      registrationPollGeneration.current += 1;
+      const generation = registrationPollGeneration.current;
+      if (registrationPollTimer.current)
+        clearTimeout(registrationPollTimer.current);
+
+      const schedule = (delay: number) => {
+        if (generation !== registrationPollGeneration.current) return;
+        registrationPollTimer.current = setTimeout(() => {
+          void poll();
+        }, delay);
+      };
+      const poll = async (): Promise<void> => {
+        try {
+          const response = await fetch(
+            `${browserApiOrigin}/v1/campaigns/${campaign.campaign}/registrations/${wallet}`,
+            { cache: "no-store" },
+          );
+          const result = await readApiJson<{
+            registered: boolean;
+            status: string;
+          }>(response, "Could not refresh registration status");
+          if (generation !== registrationPollGeneration.current) return;
+          if (result.registered) {
+            setRegistration("confirmed");
+            setError(null);
+            return;
+          }
+          if (result.status === "accepted" || result.status === "submitted") {
+            setRegistration("registering");
+            schedule(750);
+            return;
+          }
+          if (result.status === "expired" || result.status === "failed") {
+            setRegistration("error");
+            setError(
+              result.status === "expired"
+                ? "Registration expired before it reached Devnet. Try Join again."
+                : "Registration failed before it reached Devnet. Try Join again.",
+            );
+            return;
+          }
+          setRegistration("not-registered");
+        } catch {
+          if (retryNetworkErrors) schedule(1_500);
+        }
+      };
+      void poll();
+    },
+    [campaign.campaign],
+  );
+
   useEffect(
     () => () => {
+      registrationPollGeneration.current += 1;
       if (pollTimer.current) clearTimeout(pollTimer.current);
+      if (registrationPollTimer.current)
+        clearTimeout(registrationPollTimer.current);
       if (openingTimer.current) clearTimeout(openingTimer.current);
     },
     [],
   );
 
   useEffect(() => {
-    if (!signer.address) return;
-    const controller = new AbortController();
-    void fetch(
-      `${browserApiOrigin}/v1/campaigns/${campaign.campaign}/registrations/${signer.address}`,
-      { cache: "no-store", signal: controller.signal },
-    )
-      .then(async (response) =>
-        response.ok
-          ? readApiJson<{
-              registered: boolean;
-              status: string;
-            }>(response, "Could not refresh registration status")
-          : null,
-      )
-      .then((result) => {
-        if (result?.registered) setRegistration("confirmed");
-        else if (
-          result?.status === "accepted" ||
-          result?.status === "submitted"
-        )
-          setRegistration("registering");
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [campaign.campaign, signer.address]);
+    registrationPollGeneration.current += 1;
+    if (registrationPollTimer.current)
+      clearTimeout(registrationPollTimer.current);
+    if (!signer.address) {
+      registrationPollTimer.current = setTimeout(
+        () => setRegistration("not-registered"),
+        0,
+      );
+      return () => {
+        if (registrationPollTimer.current)
+          clearTimeout(registrationPollTimer.current);
+      };
+    }
+    beginRegistrationPoll(signer.address);
+    return () => {
+      registrationPollGeneration.current += 1;
+      if (registrationPollTimer.current)
+        clearTimeout(registrationPollTimer.current);
+    };
+  }, [beginRegistrationPoll, signer.address]);
 
   const countdown = focusedRound
     ? Math.max(
@@ -281,11 +336,12 @@ export function FanExperience({
       });
       if (result.status === "confirmed" || result.status === "finalized")
         setRegistration("confirmed");
+      else beginRegistrationPoll(signer.address, true);
     } catch (caught) {
       setRegistration("error");
       setError(message(caught));
     }
-  }, [campaign.campaign, signer]);
+  }, [beginRegistrationPoll, campaign.campaign, signer]);
 
   async function pollReceipt(id: string, capability: string): Promise<void> {
     try {

@@ -29,7 +29,8 @@ export async function registrationRequestExists(
   wallet: string,
 ): Promise<boolean> {
   const result = await pool.query(
-    "SELECT 1 FROM registration_requests WHERE campaign = $1 AND wallet = $2",
+    `SELECT 1 FROM registration_requests
+     WHERE campaign = $1 AND wallet = $2 AND status NOT IN ('expired', 'failed')`,
     [campaign, wallet],
   );
   return result.rowCount === 1;
@@ -53,18 +54,19 @@ export async function acceptRegistration(
       status: AcceptedRegistration["status"];
       accepted_at: Date;
     }>(
-      "SELECT id, campaign, wallet, status, accepted_at FROM registration_requests WHERE campaign = $1 AND wallet = $2",
+      `SELECT id, campaign, wallet, status, accepted_at
+       FROM registration_requests WHERE campaign = $1 AND wallet = $2 FOR UPDATE`,
       [input.campaign, input.wallet],
     );
-    if (existing.rows[0]) {
+    const existingRow = existing.rows[0];
+    if (existingRow && !["expired", "failed"].includes(existingRow.status)) {
       await client.query("COMMIT");
-      const row = existing.rows[0];
       return {
-        id: row.id,
-        campaign: row.campaign,
-        wallet: row.wallet,
-        status: row.status,
-        acceptedAt: row.accepted_at,
+        id: existingRow.id,
+        campaign: existingRow.campaign,
+        wallet: existingRow.wallet,
+        status: existingRow.status,
+        acceptedAt: existingRow.accepted_at,
         duplicate: true,
       };
     }
@@ -94,23 +96,54 @@ export async function acceptRegistration(
       challenge.rowCount === 1,
       "registration challenge is invalid, used, or expired",
     );
-    const id = randomUUID();
+    const id = existingRow?.id ?? randomUUID();
     const traceId = input.traceId ?? randomUUID();
-    const inserted = await client.query<{ accepted_at: Date }>(
-      `INSERT INTO registration_requests (
-         id, campaign, wallet, intent_hash, fan_signature, nonce, expires_at, status, trace_id
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'accepted',$8) RETURNING accepted_at`,
-      [
-        id,
-        input.campaign,
-        input.wallet,
-        Buffer.from(input.intentHash),
-        Buffer.from(input.fanSignature),
-        Buffer.from(input.nonce),
-        input.expiresAt,
-        traceId,
-      ],
-    );
+    let acceptedAt: Date;
+    if (existingRow) {
+      await client.query(
+        `UPDATE outbox
+         SET published_at = COALESCE(published_at, clock_timestamp()),
+             last_error = COALESCE(last_error, 'superseded by registration retry')
+         WHERE aggregate_type = 'registration' AND aggregate_key = $1
+           AND event_type = 'registration.accepted'
+           AND published_at IS NULL AND dead_lettered_at IS NULL`,
+        [id],
+      );
+      const updated = await client.query<{ accepted_at: Date }>(
+        `UPDATE registration_requests SET
+           intent_hash = $2, fan_signature = $3, nonce = $4, expires_at = $5,
+           status = 'accepted', registration_pda = NULL, transaction_signature = NULL,
+           error_code = NULL, trace_id = $6, accepted_at = clock_timestamp(),
+           updated_at = clock_timestamp()
+         WHERE id = $1 RETURNING accepted_at`,
+        [
+          id,
+          Buffer.from(input.intentHash),
+          Buffer.from(input.fanSignature),
+          Buffer.from(input.nonce),
+          input.expiresAt,
+          traceId,
+        ],
+      );
+      acceptedAt = updated.rows[0]?.accepted_at ?? new Date();
+    } else {
+      const inserted = await client.query<{ accepted_at: Date }>(
+        `INSERT INTO registration_requests (
+           id, campaign, wallet, intent_hash, fan_signature, nonce, expires_at, status, trace_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'accepted',$8) RETURNING accepted_at`,
+        [
+          id,
+          input.campaign,
+          input.wallet,
+          Buffer.from(input.intentHash),
+          Buffer.from(input.fanSignature),
+          Buffer.from(input.nonce),
+          input.expiresAt,
+          traceId,
+        ],
+      );
+      acceptedAt = inserted.rows[0]?.accepted_at ?? new Date();
+    }
     await client.query(
       `INSERT INTO outbox (aggregate_type, aggregate_key, event_type, payload, trace_id)
        VALUES ('registration', $1, 'registration.accepted', $2::jsonb, $3)`,
@@ -130,7 +163,7 @@ export async function acceptRegistration(
       campaign: input.campaign,
       wallet: input.wallet,
       status: "accepted",
-      acceptedAt: inserted.rows[0]?.accepted_at ?? new Date(),
+      acceptedAt,
       duplicate: false,
     };
   } catch (error) {

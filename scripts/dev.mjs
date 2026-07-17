@@ -5,6 +5,9 @@ const commands = [
   ["--filter", "@goaldrop/web", "dev"],
   ["--filter", "@goaldrop/service", "dev"],
   ["--filter", "@goaldrop/service", "dev:indexer"],
+  ["--filter", "@goaldrop/service", "dev:oracle"],
+  ["--filter", "@goaldrop/service", "dev:settlement"],
+  ["--filter", "@goaldrop/service", "dev:demo"],
 ];
 const children = new Set();
 let shuttingDown = false;

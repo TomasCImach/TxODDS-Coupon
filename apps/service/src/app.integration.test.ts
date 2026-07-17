@@ -143,7 +143,14 @@ integration("GoalDrop HTTP contracts", () => {
       },
     });
     expect(accepted.statusCode).toBe(200);
-    expect(accepted.json()).toMatchObject({
+    const firstRegistration = accepted.json<{
+      registrationId: string;
+      campaign: string;
+      wallet: string;
+      status: string;
+      duplicate: boolean;
+    }>();
+    expect(firstRegistration).toMatchObject({
       campaign,
       wallet,
       status: "accepted",
@@ -166,6 +173,64 @@ integration("GoalDrop HTTP contracts", () => {
     });
     expect(duplicate.statusCode).toBe(200);
     expect(duplicate.json()).toMatchObject({ duplicate: true });
+
+    await pool.query(
+      "UPDATE registration_requests SET status = 'expired', error_code = 'intent_expired' WHERE id = $1",
+      [firstRegistration.registrationId],
+    );
+    const retryChallengeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/intents/registration",
+      headers: { origin: "http://localhost:3000" },
+      payload: { campaign, wallet },
+    });
+    const retryChallenge = retryChallengeResponse.json<{
+      nonce: string;
+      expiresAt: number;
+    }>();
+    const retryFields = canonicalizeIntent({
+      programId,
+      action: IntentAction.Register,
+      campaign,
+      wallet,
+      nonce: Buffer.from(retryChallenge.nonce, "base64url"),
+      expiresAt: BigInt(retryChallenge.expiresAt),
+    });
+    const retryHash = intentHash(retryFields);
+    const retried = await app.inject({
+      method: "POST",
+      url: "/v1/registrations",
+      headers: { origin: "http://localhost:3000" },
+      payload: {
+        campaign,
+        wallet,
+        nonce: retryChallenge.nonce,
+        expiresAt: retryChallenge.expiresAt,
+        intentHash: Buffer.from(retryHash).toString("hex"),
+        signature: Buffer.from(
+          nacl.sign.detached(retryHash, fan.secretKey),
+        ).toString("base64"),
+      },
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json()).toMatchObject({
+      registrationId: firstRegistration.registrationId,
+      status: "accepted",
+      duplicate: false,
+    });
+    const retryOutbox = await pool.query<{
+      published_at: Date | null;
+      dead_lettered_at: Date | null;
+    }>(
+      `SELECT published_at, dead_lettered_at FROM outbox
+       WHERE aggregate_type = 'registration' AND aggregate_key = $1
+       ORDER BY id`,
+      [firstRegistration.registrationId],
+    );
+    expect(retryOutbox.rows).toHaveLength(2);
+    expect(retryOutbox.rows[0]?.published_at).toBeInstanceOf(Date);
+    expect(retryOutbox.rows[1]?.published_at).toBeNull();
+    expect(retryOutbox.rows[1]?.dead_lettered_at).toBeNull();
   });
 
   it("accepts a claim, returns a signed receipt capability, and authorizes its read", async () => {

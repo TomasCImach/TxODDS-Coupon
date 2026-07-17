@@ -78,6 +78,7 @@ export async function registerFanRoutes(
         action: "register",
         ...body,
         origin,
+        ttlSeconds: 120,
       });
       return challengeResponse(
         deps,
