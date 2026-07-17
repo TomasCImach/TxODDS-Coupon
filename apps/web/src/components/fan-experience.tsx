@@ -598,7 +598,7 @@ export function FanExperience({
             ))}
         </div>
       </section>
-      <TransferPanel />
+      <TransferPanel refreshKey={winner?.explorer ?? ""} />
     </div>
   );
 }

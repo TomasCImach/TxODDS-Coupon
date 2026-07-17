@@ -24,7 +24,11 @@ interface TransferReview {
   baseUnits: bigint;
 }
 
-export function TransferPanel() {
+export function TransferPanel({
+  refreshKey = "",
+}: {
+  refreshKey?: string | number;
+}) {
   const signer = useFanSigner();
   const [rewards, setRewards] = useState<RewardView | null>(null);
   const [destination, setDestination] = useState("");
@@ -58,6 +62,19 @@ export function TransferPanel() {
     return () => {
       cancelAnimationFrame(frame);
       controller.abort();
+    };
+  }, [refresh, refreshKey]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible")
+        void refresh().catch(() => undefined);
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [refresh]);
 
