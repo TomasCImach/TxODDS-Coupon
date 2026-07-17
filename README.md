@@ -44,7 +44,7 @@ With private TxLINE credentials present only in the ignored root `.env`, run `pn
 
 ## Running the application
 
-Copy `.env.example` to `.env` outside version control and fill role-scoped Devnet credentials. Start the API and UI during development with `pnpm dev`; run workers independently with the `start:*` scripts in `apps/service/package.json`. For a container deployment:
+Copy `.env.example` to the ignored repository-root `.env` and fill role-scoped Devnet credentials. `pnpm dev` explicitly loads that file, starts the API on port 4000 and UI on port 3000, and runs the read-only chain indexer so a fresh local database receives the configured demo-campaign projection. Authority-bearing workers remain opt-in: run the demo controller and settlement worker independently with the `start:*` scripts in `apps/service/package.json` when you intend to exercise the on-chain demo. Those scripts load the same root file. For a container deployment:
 
 ```bash
 docker compose -f compose.app.yaml up --build

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { browserApiOrigin } from "../lib/api";
+import { browserApiOrigin, readApiJson } from "../lib/api";
 import { track } from "../lib/analytics";
 
 export function DemoConsole({ campaign }: { campaign: string | null }) {
@@ -123,8 +123,5 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const result = (await response.json()) as T & { message?: string };
-  if (!response.ok)
-    throw new Error(result.message ?? "Demo service unavailable");
-  return result;
+  return readApiJson<T>(response, "Demo service unavailable");
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GoalRace, type RaceState } from "@goaldrop/ui";
 import {
   browserApiOrigin,
+  readApiJson,
   type CampaignRound,
   type CampaignView,
 } from "../lib/api";
@@ -210,10 +211,10 @@ export function FanExperience({
     )
       .then(async (response) =>
         response.ok
-          ? (response.json() as Promise<{
+          ? readApiJson<{
               registered: boolean;
               status: string;
-            }>)
+            }>(response, "Could not refresh registration status")
           : null,
       )
       .then((result) => {
@@ -292,12 +293,11 @@ export function FanExperience({
         `${browserApiOrigin}/v1/receipts/${id}?cap=${encodeURIComponent(capability)}`,
         { cache: "no-store" },
       );
-      if (!response.ok) throw new Error("Could not refresh receipt status");
-      const status = (await response.json()) as {
+      const status = await readApiJson<{
         status: string;
         winnerRank: number | null;
         explorer: string | null;
-      };
+      }>(response, "Could not refresh receipt status");
       if (status.status === "confirmed" || status.status === "finalized") {
         setRaceState("confirmed");
         setWinner({
@@ -558,10 +558,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const payload = (await response.json()) as T & { message?: string };
-  if (!response.ok)
-    throw new Error(payload.message ?? `Request failed (${response.status})`);
-  return payload;
+  return readApiJson<T>(response, "Request failed");
 }
 function newestOpen(rounds: CampaignRound[]): CampaignRound | null {
   return [...rounds].reverse().find((round) => round.state === "open") ?? null;

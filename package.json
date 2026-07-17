@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm --parallel --filter @goaldrop/web --filter @goaldrop/service dev",
+    "dev": "node scripts/dev.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",

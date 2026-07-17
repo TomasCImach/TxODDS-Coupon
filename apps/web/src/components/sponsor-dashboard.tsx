@@ -5,7 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { VersionedTransaction } from "@solana/web3.js";
 import { GoalRace } from "@goaldrop/ui";
-import { browserApiOrigin, type FixtureSummary } from "../lib/api";
+import { browserApiOrigin, readApiJson, type FixtureSummary } from "../lib/api";
 import { track } from "../lib/analytics";
 import { parseTokenAmount } from "../lib/token-amount";
 
@@ -73,11 +73,11 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
         { cache: "no-store", signal: controller.signal },
       );
       if (!response.ok) return;
-      const result = (await response.json()) as {
+      const result = await readApiJson<{
         campaign: Record<string, unknown>;
         rounds: Record<string, unknown>[];
         configuredRounds?: unknown[];
-      };
+      }>(response, "Could not refresh campaign");
       setCampaignStats({
         state: String(result.campaign.state),
         requiredFunding: String(result.campaign.required_funding),
@@ -725,10 +725,7 @@ async function json<T>(path: string, payload: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json()) as T & { message?: string };
-  if (!response.ok)
-    throw new Error(body.message ?? "Sponsor transaction request failed");
-  return body;
+  return readApiJson<T>(response, "Sponsor transaction request failed");
 }
 function parseDraftTokens(value: string, decimals: number): bigint {
   try {

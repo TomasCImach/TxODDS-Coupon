@@ -5,6 +5,35 @@ export const serverApiOrigin =
 export const browserApiOrigin =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:4000";
 
+export async function readApiJson<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      "GoalDrop API returned a non-JSON response. Check that the API is running on port 4000 and NEXT_PUBLIC_API_ORIGIN points to it.",
+    );
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("GoalDrop API returned malformed JSON.");
+  }
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" &&
+      payload !== null &&
+      "message" in payload &&
+      typeof payload.message === "string"
+        ? payload.message
+        : `${fallbackMessage} (${response.status})`;
+    throw new Error(message);
+  }
+  return payload as T;
+}
+
 export interface FixtureSummary {
   fixtureId: string;
   home: string;
@@ -68,8 +97,11 @@ export async function getFixtures(): Promise<FixtureSummary[]> {
       cache: "no-store",
       signal: AbortSignal.timeout(3_000),
     });
-    if (!response.ok) throw new Error("fixture API unavailable");
-    return ((await response.json()) as { fixtures: FixtureSummary[] }).fixtures;
+    const payload = await readApiJson<{ fixtures: FixtureSummary[] }>(
+      response,
+      "Fixture API unavailable",
+    );
+    return payload.fixtures;
   } catch {
     return [];
   }
@@ -84,7 +116,7 @@ export async function getCampaign(
       { cache: "no-store", signal: AbortSignal.timeout(3_000) },
     );
     if (!response.ok) return null;
-    const data = (await response.json()) as {
+    const data = await readApiJson<{
       campaign: Record<string, unknown>;
       rounds: Record<string, unknown>[];
       configuredRounds: {
@@ -93,7 +125,7 @@ export async function getCampaign(
         winnerCap: number;
       }[];
       explorer: string;
-    };
+    }>(response, "Campaign API unavailable");
     return normalizeCampaign(data);
   } catch {
     return null;

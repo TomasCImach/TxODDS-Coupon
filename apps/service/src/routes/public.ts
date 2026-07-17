@@ -374,13 +374,23 @@ export async function registerPublicRoutes(
       let cursor = BigInt(
         request.headers["last-event-id"]?.toString() ?? query.after ?? "0",
       );
+      const requestOrigin = request.headers.origin;
+      const corsHeaders =
+        requestOrigin === deps.config.PUBLIC_ORIGIN
+          ? {
+              "Access-Control-Allow-Origin": requestOrigin,
+              Vary: "Origin",
+            }
+          : {};
       reply.hijack();
       reply.raw.writeHead(200, {
+        ...corsHeaders,
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       });
+      reply.raw.flushHeaders();
       const min = await deps.pool.query<{ min: string | null }>(
         "SELECT min(id)::text AS min FROM application_events WHERE campaign = $1",
         [campaign],

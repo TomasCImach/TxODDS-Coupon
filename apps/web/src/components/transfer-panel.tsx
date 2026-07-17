@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { useFanSigner } from "../app/providers";
-import { browserApiOrigin } from "../lib/api";
+import { browserApiOrigin, readApiJson } from "../lib/api";
 import { track } from "../lib/analytics";
 import { formatTokenAmount, parseTokenAmount } from "../lib/token-amount";
 
@@ -42,7 +42,10 @@ export function TransferPanel() {
         `${browserApiOrigin}/v1/wallets/${signer.address}/rewards`,
         { cache: "no-store", signal },
       );
-      if (response.ok) setRewards((await response.json()) as RewardView);
+      if (response.ok)
+        setRewards(
+          await readApiJson<RewardView>(response, "Could not refresh rewards"),
+        );
     },
     [signer.address],
   );
@@ -260,9 +263,7 @@ async function json<T>(path: string, payload: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json()) as T & { message?: string };
-  if (!response.ok) throw new Error(body.message ?? "Transfer request failed");
-  return body;
+  return readApiJson<T>(response, "Transfer request failed");
 }
 function fromBase64(value: string): Uint8Array {
   return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));

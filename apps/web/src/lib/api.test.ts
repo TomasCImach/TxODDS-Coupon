@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCampaign } from "./api";
+import { normalizeCampaign, readApiJson } from "./api";
 
 describe("campaign API normalization", () => {
   it("preserves configured economics before any round opens", () => {
@@ -38,5 +38,34 @@ describe("campaign API normalization", () => {
     ]);
     expect(view.rounds).toEqual([]);
     expect(view.home).toBe("Argentina");
+  });
+});
+
+describe("API response parsing", () => {
+  it("returns JSON and preserves an API error message", async () => {
+    await expect(
+      readApiJson<{ ok: boolean }>(
+        Response.json({ message: "campaign is inactive" }, { status: 409 }),
+        "Request failed",
+      ),
+    ).rejects.toThrow("campaign is inactive");
+    await expect(
+      readApiJson<{ ok: boolean }>(
+        Response.json({ ok: true }),
+        "Request failed",
+      ),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("does not try to parse a Next.js HTML response as JSON", async () => {
+    await expect(
+      readApiJson(
+        new Response("<!DOCTYPE html><title>Not Found</title>", {
+          status: 404,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+        "Request failed",
+      ),
+    ).rejects.toThrow("GoalDrop API returned a non-JSON response");
   });
 });

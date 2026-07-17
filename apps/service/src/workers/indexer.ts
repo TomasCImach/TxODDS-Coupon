@@ -72,6 +72,16 @@ export async function runChainIndexer(
     "confirmed",
   );
   try {
+    if (config.DEMO_CAMPAIGN) {
+      try {
+        await reconcileAccounts(config, connection, pool, programId, false);
+      } catch (error) {
+        logger.warn(
+          { reason: safeMessage(error), campaign: config.DEMO_CAMPAIGN },
+          "targeted demo-campaign reconciliation failed; continuing with normal indexer recovery",
+        );
+      }
+    }
     try {
       await catchUpLogs(connection, pool, programId);
     } catch (error) {

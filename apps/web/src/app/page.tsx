@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { getFixtures } from "../lib/api";
+import { resolveDemoCampaign } from "../lib/demo-config";
 
 export default async function HomePage() {
   const fixtures = await getFixtures();
-  const demoCampaign = process.env.NEXT_PUBLIC_DEMO_CAMPAIGN;
+  const demoCampaign = resolveDemoCampaign(
+    process.env.NEXT_PUBLIC_DEMO_CAMPAIGN,
+    process.env.DEMO_CAMPAIGN,
+  );
   return (
     <>
       <section className="hero">

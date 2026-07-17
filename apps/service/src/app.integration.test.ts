@@ -282,6 +282,30 @@ integration("GoalDrop HTTP contracts", () => {
     }
   });
 
+  it("flushes an allowlisted CORS header on the SSE stream", async () => {
+    await pool.query("DELETE FROM application_events");
+    await pool.query(
+      `INSERT INTO application_events (id, campaign, event_type, safe_payload, trace_id)
+       OVERRIDING SYSTEM VALUE VALUES (100,$1,'campaign.updated',$2::jsonb,$3)`,
+      [
+        campaign,
+        JSON.stringify({ campaign, state: "active" }),
+        crypto.randomUUID(),
+      ],
+    );
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/campaigns/${campaign}/events?after=1`,
+      headers: { origin: "http://localhost:3000" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:3000",
+    );
+    expect(response.headers["content-type"]).toContain("text/event-stream");
+    expect(response.body).toContain("event: resnapshot");
+  });
+
   it("exports operational backlog and retention gauges", async () => {
     await pool.query(
       `INSERT INTO chain_transactions
