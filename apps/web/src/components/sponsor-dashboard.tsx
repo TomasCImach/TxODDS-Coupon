@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
+import {
+  PublicKey,
+  type ParsedAccountData,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { GoalRace } from "@goaldrop/ui";
 import { browserApiOrigin, readApiJson, type FixtureSummary } from "../lib/api";
 import { track } from "../lib/analytics";
+import { selectFundedSourceTokenAccount } from "../lib/source-token-account";
 import { parseTokenAmount } from "../lib/token-amount";
 
 interface RoundDraft {
@@ -26,6 +32,7 @@ interface CampaignStats {
 
 export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
   const wallet = useWallet();
+  const { connection } = useConnection();
   const [fixtureId, setFixtureId] = useState(
     fixtures.find((fixture) => fixture.fixtureSlotAvailable)?.fixtureId ?? "",
   );
@@ -43,7 +50,13 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
   );
   const [busy, setBusy] = useState(false);
   const [campaign, setCampaign] = useState<string | null>(null);
-  const [sourceTokenAccount, setSourceTokenAccount] = useState("");
+  const [sourceTokenSelection, setSourceTokenSelection] = useState({
+    wallet: "",
+    address: "",
+  });
+  const [sourceTokenStatus, setSourceTokenStatus] = useState(
+    "Connect a sponsor wallet to detect its GOAL account.",
+  );
   const [campaignStage, setCampaignStage] = useState<
     "none" | "draft" | "funded" | "active" | "terminal"
   >("none");
@@ -53,6 +66,11 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
   const decimals = Number(process.env.NEXT_PUBLIC_REWARD_DECIMALS ?? 6);
   const rewardMint =
     process.env.NEXT_PUBLIC_REWARD_MINT ?? "Configured GoalDrop mint";
+  const sponsorAddress = wallet.publicKey?.toBase58() ?? "";
+  const sourceTokenAccount =
+    sourceTokenSelection.wallet === sponsorAddress
+      ? sourceTokenSelection.address
+      : "";
   const liability = useMemo(
     () =>
       rounds.reduce(
@@ -63,6 +81,63 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       ),
     [rounds, decimals],
   );
+
+  useEffect(() => {
+    const sponsor = wallet.publicKey;
+    if (!sponsor) return;
+
+    let rewardMintAddress: PublicKey;
+    try {
+      rewardMintAddress = new PublicKey(rewardMint);
+    } catch {
+      return;
+    }
+
+    let cancelled = false;
+    void connection
+      .getParsedTokenAccountsByOwner(
+        sponsor,
+        { mint: rewardMintAddress },
+        "confirmed",
+      )
+      .then(({ value }) => {
+        if (cancelled) return;
+        const selected = selectFundedSourceTokenAccount(
+          value
+            .filter(({ account }) => account.owner.equals(TOKEN_PROGRAM_ID))
+            .map(({ pubkey, account }) => {
+              const parsed = account.data as ParsedAccountData;
+              return {
+                address: pubkey.toBase58(),
+                amount: BigInt(String(parsed.parsed.info.tokenAmount.amount)),
+              };
+            }),
+        );
+        if (!selected) {
+          setSourceTokenStatus(
+            "No funded classic SPL GOAL account was found. Use the Devnet faucet or enter one manually.",
+          );
+          return;
+        }
+        setSourceTokenSelection({
+          wallet: sponsor.toBase58(),
+          address: selected.address,
+        });
+        setSourceTokenStatus(
+          `Detected ${formatBaseUnits(selected.amount, decimals)} GOAL in ${short(selected.address)}.`,
+        );
+      })
+      .catch(() => {
+        if (!cancelled)
+          setSourceTokenStatus(
+            "GOAL account detection failed. You can still enter the token account manually.",
+          );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, decimals, rewardMint, wallet.publicKey]);
 
   useEffect(() => {
     if (!campaign) return;
@@ -242,7 +317,10 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
         templateId: built.templateId,
         signedTransaction: toBase64(signed.serialize()),
       });
-      setSourceTokenAccount(String(result.tokenAccount));
+      setSourceTokenSelection({
+        wallet: wallet.publicKey.toBase58(),
+        address: String(result.tokenAccount),
+      });
       setStatus(
         `Devnet faucet confirmed: ${formatBaseUnits(BigInt(String(result.amount)), decimals)} valueless GOAL in ${short(String(result.tokenAccount))}.`,
       );
@@ -539,13 +617,17 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                 className="field"
                 value={sourceTokenAccount}
                 onChange={(event) =>
-                  setSourceTokenAccount(event.target.value.trim())
+                  setSourceTokenSelection({
+                    wallet: sponsorAddress,
+                    address: event.target.value.trim(),
+                  })
                 }
                 placeholder="Required for exact funding"
               />
               <small>
-                The wallet-signed Devnet faucet supplies 500 valueless GOAL once
-                per sponsor wallet; it never distributes real assets.
+                {sourceTokenStatus} The wallet-signed Devnet faucet supplies 500
+                valueless GOAL once per sponsor wallet; it never distributes
+                real assets.
               </small>
             </label>
             <button

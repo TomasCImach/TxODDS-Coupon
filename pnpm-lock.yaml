@@ -114,6 +114,9 @@ importers:
       '@passkeys/react':
         specifier: 3.0.1
         version: 3.0.1(@passkeys/core@4.1.0(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(sats-connect@1.0.0)
+      '@solana/spl-token':
+        specifier: 0.4.15
+        version: 0.4.15(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@6.0.3)(utf-8-validate@6.0.6)
       '@solana/wallet-adapter-react':
         specifier: 0.15.39
         version: 0.15.39(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.7)(utf-8-validate@6.0.6))(react@19.2.7)(typescript@6.0.3)(utf-8-validate@6.0.6)
