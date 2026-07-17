@@ -148,7 +148,7 @@ The first update wins the idempotency race. Later confirmation, amendment, VAR, 
 
 **Research.** The hackathon terms require judges to evaluate a submission without payment, token purchases, or creating an external blockchain wallet/account. The track also expects Solana-backed behavior and a reliable demo path. See the [track listing](https://superteam.fun/earn/listing/consumer-and-fan-experiences) and [hackathon terms](https://txline.txodds.com/documentation/legal/hackathon-terms).
 
-**Suggested answer adopted.** Deploy a pre-funded demo campaign. "Instant Demo" generates an ephemeral Ed25519 signer in browser memory, registers it gaslessly, and uses the real claim path. It is labeled temporary, Devnet-only, and non-recoverable. The normal fan path uses a passkey; the external-wallet sponsor and fan paths remain available. This avoids making the judge acquire SOL or install a wallet while preserving real on-chain settlement.
+**Suggested answer adopted.** Deploy a pre-funded demo campaign. "Instant Demo" generates one Ed25519 signer per browser profile, persists its 32-byte seed in origin-scoped browser storage, registers it gaslessly, and uses the real claim path. This keeps one address across tabs and reloads so rewards remain visible throughout judging. Disconnect marks the stored signer inactive without rotating it; an explicit, warned Reset action or clearing site data deletes it. The UI labels it Devnet-only, browser-saved, unsuitable for real assets, and unavailable in production-tier builds. It has no backup or cross-browser recovery. The normal fan path uses a passkey; the external-wallet sponsor and fan paths remain available. This avoids making the judge acquire SOL or install a wallet while preserving real on-chain settlement.
 
 ### Q9. What final event and timeout make funds refundable?
 
@@ -1087,7 +1087,7 @@ Reward transfer does not call GoalDrop. The API builds a standard classic SPL `t
 - the platform fee payer may create the destination ATA and pay the Devnet fee;
 - the fan wallet must sign the transfer transaction.
 
-The relayer never receives token authority. Instant Demo wallets are ephemeral; the UI warns the judge to transfer before leaving if they want to inspect the destination balance.
+The relayer never receives token authority. The Devnet-only Instant Demo wallet remains fan-controlled and stable within one browser profile; the UI warns that Reset or clearing site data permanently loses that local signer and that it must never receive real assets.
 
 ### 10.7 Completion, expiry, and refund
 
@@ -1724,7 +1724,7 @@ These do not prevent architecture definition, but any open item blocks claiming 
 5. **RPC capacity (resolved for MVP):** the requester selected the Foundation public Devnet RPC; a paced 100-transaction capacity probe and the RB-4 100/100 settlement run pass, while broad and archival scans remain paced/fallback-safe.
 6. **Timeout approval (resolved):** the requester authorized documented assumptions, so kickoff plus eight hours and refund-on-postponement are adopted for the Devnet MVP.
 7. **Demo-token policy (resolved):** the published classic SPL mint is six-decimal, valueless, has no freeze authority, and has a wallet-signed one-use 500-GOAL faucet.
-8. **Judge Quickstart security review (resolved):** the Instant Demo signer is memory-only, disappears on reload/disconnect, and repository checks reject browser private-key persistence.
+8. **Judge Quickstart security review (resolved):** on July 17, 2026, the requester approved one browser-profile Instant Demo signer so the demo address and earned rewards remain stable across tabs and reloads. The origin-scoped seed is permitted only for the conspicuously labeled Devnet tier; production disables Instant Demo, Disconnect retains but deactivates it, Reset/clearing site data deletes it, and no backup or cross-browser recovery is promised.
 9. **Public application runtime (open):** deploy immutable web/service images plus PostgreSQL behind HTTPS, run all required roles, restrict internal health/metrics at ingress, and archive public URL, health, clean-browser, rollback, target-topology load/SSE/latency, and image/migration evidence.
 
 ### 23.1 Acceptance criteria
@@ -1733,7 +1733,7 @@ These do not prevent architecture definition, but any open item blocks claiming 
 - [ ] Blockers 1–9 are resolved with linked evidence or converted into a written product/architecture decision approved by the accountable owner before public release.
 - [ ] TxODDS permission and live-schema evidence are retained in a shareable, secret-redacted form and reflected in configuration/adapter tests.
 - [ ] Passkey and transaction benchmarks run against the exact dependency versions, browsers, program binary, RPC, and deployment topology selected for judging.
-- [ ] Demo-token and Instant Demo reviews confirm conspicuous Devnet labeling, no represented value, no recoverability promise, and no authority escape.
+- [ ] Demo-token and Instant Demo reviews confirm conspicuous Devnet labeling, no represented value, no backup or cross-browser recoverability promise, production-tier disablement, and no authority escape.
 - [ ] The release job fails if a blocker remains marked open or if required evidence is absent; silence or elapsed time never counts as resolution.
 
 ## 24. Primary references

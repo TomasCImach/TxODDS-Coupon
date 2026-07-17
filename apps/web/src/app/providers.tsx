@@ -28,6 +28,14 @@ import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import { track } from "../lib/analytics";
 import { resolvePasskeyDeploymentConfig } from "../lib/deployment-config";
+import {
+  connectInstantDemoWallet,
+  disconnectInstantDemoWallet,
+  isInstantDemoStorageKey,
+  persistInstantDemoSeed,
+  resetInstantDemoWallet,
+  restoreInstantDemoWallet,
+} from "../lib/instant-demo-wallet";
 
 type EmbeddedWallet = ReturnType<typeof createWallet>;
 type WalletMode = "passkey" | "external" | "instant-demo" | null;
@@ -38,11 +46,13 @@ interface FanSignerValue {
   connected: boolean;
   canSignMessage: boolean;
   canSignTransaction: boolean;
+  instantDemoEnabled: boolean;
   signDigest(digest: Uint8Array): Promise<Uint8Array>;
   signTransaction(
     transaction: VersionedTransaction,
   ): Promise<VersionedTransaction>;
   connectInstantDemo(): void;
+  resetInstantDemo(): void;
   disconnect(): Promise<void>;
 }
 
@@ -99,9 +109,64 @@ function StandardSolanaLayer({ children }: { children: ReactNode }) {
 function FanSignerProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const [instant, setInstant] = useState<Keypair | null>(null);
+  const instantDemoEnabled =
+    (process.env.NEXT_PUBLIC_DEPLOYMENT_TIER ?? "devnet") !== "production";
+  useEffect(() => {
+    if (!instantDemoEnabled) return;
+    const frame = requestAnimationFrame(() => {
+      setInstant((current) => {
+        try {
+          if (current) {
+            persistInstantDemoSeed(current.secretKey.slice(0, 32));
+            return current;
+          }
+          return restoreInstantDemoWallet();
+        } catch {
+          return current;
+        }
+      });
+    });
+    const synchronize = (event: StorageEvent) => {
+      if (!isInstantDemoStorageKey(event.key)) return;
+      setInstant((current) => {
+        let restored: Keypair | null = null;
+        try {
+          restored = restoreInstantDemoWallet();
+        } catch {
+          return current;
+        }
+        if (
+          current &&
+          (!restored || !current.publicKey.equals(restored.publicKey))
+        )
+          current.secretKey.fill(0);
+        return restored;
+      });
+    };
+    window.addEventListener("storage", synchronize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("storage", synchronize);
+    };
+  }, [instantDemoEnabled]);
   const connectInstantDemo = useCallback(() => {
-    setInstant(Keypair.generate());
-  }, []);
+    if (!instantDemoEnabled) return;
+    try {
+      setInstant(connectInstantDemoWallet());
+    } catch {
+      setInstant(Keypair.generate());
+    }
+  }, [instantDemoEnabled]);
+  const resetInstantDemo = useCallback(() => {
+    if (!instant || !instantDemoEnabled) return;
+    try {
+      const replacement = resetInstantDemoWallet();
+      instant.secretKey.fill(0);
+      setInstant(replacement);
+    } catch {
+      // Keep the current signer if browser persistence is unavailable.
+    }
+  }, [instant, instantDemoEnabled]);
   const signDigest = useCallback(
     async (digest: Uint8Array) => {
       if (instant) return nacl.sign.detached(digest, instant.secretKey);
@@ -125,6 +190,11 @@ function FanSignerProvider({ children }: { children: ReactNode }) {
   );
   const disconnect = useCallback(async () => {
     if (instant) {
+      try {
+        disconnectInstantDemoWallet();
+      } catch {
+        // In-memory disconnect still succeeds when storage is unavailable.
+      }
       instant.secretKey.fill(0);
       setInstant(null);
     }
@@ -146,9 +216,11 @@ function FanSignerProvider({ children }: { children: ReactNode }) {
       connected: Boolean(instant || wallet.connected),
       canSignMessage: Boolean(instant || wallet.signMessage),
       canSignTransaction: Boolean(instant || wallet.signTransaction),
+      instantDemoEnabled,
       signDigest,
       signTransaction,
       connectInstantDemo,
+      resetInstantDemo,
       disconnect,
     }),
     [
@@ -157,10 +229,12 @@ function FanSignerProvider({ children }: { children: ReactNode }) {
       wallet.publicKey,
       wallet.signMessage,
       wallet.signTransaction,
+      instantDemoEnabled,
       mode,
       signDigest,
       signTransaction,
       connectInstantDemo,
+      resetInstantDemo,
       disconnect,
     ],
   );
@@ -221,22 +295,41 @@ export function WalletChoices() {
         >
           Disconnect
         </button>
+        {signer.mode === "instant-demo" ? (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Create a new Instant Demo wallet? The current Devnet wallet and its rewards will no longer be available in this browser.",
+                )
+              )
+                signer.resetInstantDemo();
+            }}
+          >
+            Reset demo wallet
+          </button>
+        ) : null}
       </div>
     );
   }
   return (
     <div className="wallet-choices">
       <WalletMultiButton>Continue with passkey or wallet</WalletMultiButton>
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={signer.connectInstantDemo}
-      >
-        Instant Demo — no extension
-      </button>
+      {signer.instantDemoEnabled ? (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={signer.connectInstantDemo}
+        >
+          Instant Demo — no extension
+        </button>
+      ) : null}
       <p>
-        Passkeys use your device security. Instant Demo is a temporary
-        Devnet-only browser wallet and is not for real assets.
+        {signer.instantDemoEnabled
+          ? "Passkeys use your device security. Instant Demo is a browser-saved, Devnet-only wallet and is not for real assets."
+          : "Passkeys and external wallets use their own device security."}
       </p>
     </div>
   );

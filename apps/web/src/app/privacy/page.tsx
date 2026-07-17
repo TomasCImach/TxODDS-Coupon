@@ -28,9 +28,11 @@ export default function PrivacyPage() {
         authentication and key material under that provider&apos;s terms.
         GoalDrop asks the wallet to sign an exact digest or transaction. The
         GoalDrop API does not receive biometrics, passkey private keys, seed
-        phrases, or wallet private keys. Instant Demo keys stay in browser
-        session storage and are deleted when disconnected or when the session
-        ends.
+        phrases, or wallet private keys. For the Devnet-only Instant Demo path,
+        this browser profile stores one origin-scoped local seed so the same
+        address survives reloads and works across tabs. Disconnecting keeps the
+        seed but marks the wallet inactive; Reset demo wallet or clearing site
+        data deletes it. Never send real assets to an Instant Demo address.
       </p>
 
       <h2>Analytics, cookies, and retention</h2>
@@ -57,9 +59,10 @@ export default function PrivacyPage() {
       <h2>Your choices</h2>
       <p>
         You may use an external wallet, a device passkey wallet, or the
-        temporary Instant Demo path. You may enable Global Privacy Control to
-        disable analytics. Avoid using a wallet address that you do not want
-        associated with public Devnet activity.
+        browser-saved Instant Demo path. You may enable Global Privacy Control
+        to disable analytics. Avoid using a wallet address that you do not want
+        associated with public Devnet activity. Instant Demo has no backup or
+        cross-browser recovery mechanism.
       </p>
     </article>
   );
