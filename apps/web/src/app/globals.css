@@ -236,6 +236,19 @@ h1 {
   border-left: 3px solid var(--red);
   padding-left: 12px;
 }
+.error-banner {
+  display: grid;
+  gap: 3px;
+  color: #ffb3b9;
+  border: 1px solid rgba(239, 52, 70, 0.65);
+  border-left: 4px solid var(--red);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(239, 52, 70, 0.09);
+}
+.fan-experience > .error-banner {
+  grid-column: 1 / -1;
+}
 
 .passkey-surface {
   position: fixed;
@@ -991,6 +1004,15 @@ h1 {
 .connected-wallet .text-button {
   text-align: left;
 }
+.identity-lock {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.identity-lock:disabled {
+  opacity: 0.58;
+}
 .round-strip {
   grid-column: 1 / -1;
   padding: 26px;
@@ -1000,6 +1022,25 @@ h1 {
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 5px;
+}
+.round-group + .round-group,
+.past-rounds {
+  margin-top: 22px;
+}
+.round-group h3 {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+.past-rounds {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.past-rounds summary {
+  width: fit-content;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-weight: 800;
+  cursor: pointer;
 }
 .round-chip {
   min-width: 180px;
@@ -1015,6 +1056,10 @@ h1 {
 }
 .round-chip.active {
   border-color: var(--lime);
+}
+.round-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .round-chip.planned {
   cursor: default;
@@ -1148,6 +1193,12 @@ h1 {
 .demo-status {
   margin-top: 24px;
   color: var(--muted);
+}
+.demo-controller-note {
+  max-width: 680px;
+  color: var(--muted);
+  border-left: 3px solid var(--lime);
+  padding-left: 12px;
 }
 
 .sponsor-shell {
@@ -1359,6 +1410,51 @@ h1 {
   color: var(--muted);
   font-size: 0.83rem;
 }
+.disabled-reason {
+  display: block;
+  margin: 7px 0 0;
+  color: #d6b77a;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+.transaction-progress {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(167, 255, 69, 0.035);
+  list-style: none;
+}
+.transaction-progress li {
+  display: grid;
+  grid-template-columns: 9px 1fr;
+  gap: 9px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.transaction-progress li > span {
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.transaction-progress li[data-state="current"] {
+  color: var(--lime);
+  font-weight: 800;
+}
+.transaction-progress li[data-state="current"] > span {
+  background: var(--lime);
+  box-shadow: 0 0 0 3px rgba(167, 255, 69, 0.12);
+}
+.transaction-progress li[data-state="complete"] {
+  color: var(--green);
+}
+.transaction-progress li[data-state="complete"] > span {
+  background: var(--green);
+}
 .campaign-lifecycle {
   display: grid;
   gap: 4px;
@@ -1370,6 +1466,12 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.action-control {
+  min-width: 0;
+}
+.action-control > button {
+  width: 100%;
 }
 .lifecycle-actions .secondary-button {
   padding-inline: 10px;

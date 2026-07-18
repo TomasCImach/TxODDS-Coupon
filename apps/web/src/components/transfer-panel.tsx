@@ -6,6 +6,11 @@ import { useFanSigner } from "../app/providers";
 import { browserApiOrigin, readApiJson } from "../lib/api";
 import { track } from "../lib/analytics";
 import { formatTokenAmount, parseTokenAmount } from "../lib/token-amount";
+import {
+  transactionProgressSteps,
+  type TransactionPhase,
+} from "../lib/transaction-progress";
+import { TransactionProgress } from "./transaction-progress";
 
 interface RewardView {
   balance: string;
@@ -37,6 +42,7 @@ export function TransferPanel({
     "Confirmed rewards are held in your own classic SPL token account.",
   );
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<TransactionPhase | null>(null);
   const [review, setReview] = useState<TransferReview | null>(null);
 
   const refresh = useCallback(
@@ -84,6 +90,22 @@ export function TransferPanel({
   const balance = rewards
     ? formatTokenAmount(BigInt(rewards.balance), decimals)
     : "—";
+  const reviewDisabledReason = busy
+    ? "Wait for the current transfer to finish."
+    : !destination
+      ? "Enter the recipient wallet address."
+      : !amount
+        ? "Enter the GOAL amount to transfer."
+        : !rewards
+          ? "Wait for the confirmed reward balance to load."
+          : BigInt(rewards.balance) === 0n
+            ? "A confirmed GOAL reward balance is required."
+            : null;
+  const activeProgressLabel = phase
+    ? transactionProgressSteps("transfer", phase).find(
+        (step) => step.state === "current",
+      )?.label
+    : null;
 
   const transfer = async () => {
     if (!review) return;
@@ -92,6 +114,7 @@ export function TransferPanel({
       return;
     }
     setBusy(true);
+    setPhase("preparing");
     try {
       track("transfer_started", {
         properties: { amount_base_units: review.baseUnits.toString() },
@@ -107,7 +130,9 @@ export function TransferPanel({
       const transaction = VersionedTransaction.deserialize(
         fromBase64(built.transaction),
       );
+      setPhase("approval");
       const signed = await signer.signTransaction(transaction);
+      setPhase("submitting");
       const submitted = await json<{ signature: string; explorer: string }>(
         "/v1/transfers/submit",
         {
@@ -133,6 +158,7 @@ export function TransferPanel({
       });
     } finally {
       setBusy(false);
+      setPhase(null);
     }
   };
 
@@ -190,6 +216,7 @@ export function TransferPanel({
           <input
             className="field"
             value={destination}
+            disabled={busy || review !== null}
             onChange={(event) => {
               setDestination(event.target.value.trim());
               setReview(null);
@@ -203,6 +230,7 @@ export function TransferPanel({
             className="field"
             inputMode="decimal"
             value={amount}
+            disabled={busy || review !== null}
             onChange={(event) => {
               setAmount(event.target.value);
               setReview(null);
@@ -236,11 +264,18 @@ export function TransferPanel({
             <button
               type="button"
               className="primary-button full"
-              disabled={busy}
+              disabled={busy || !signer.canSignTransaction}
               onClick={() => void transfer()}
             >
-              {busy ? "Confirming transfer…" : "Confirm these fields in wallet"}
+              {phase
+                ? activeProgressLabel
+                : "Confirm locked transfer in wallet"}
             </button>
+            {!signer.canSignTransaction ? (
+              <p className="disabled-reason">
+                This wallet cannot sign a token transfer transaction.
+              </p>
+            ) : null}
             <button
               type="button"
               className="text-button"
@@ -254,18 +289,16 @@ export function TransferPanel({
           <button
             type="button"
             className="secondary-button full"
-            disabled={
-              busy ||
-              !destination ||
-              !amount ||
-              !rewards ||
-              BigInt(rewards.balance) === 0n
-            }
+            disabled={Boolean(reviewDisabledReason)}
             onClick={prepareReview}
           >
-            Review transfer
+            Lock and review reward transfer
           </button>
         )}
+        {!review && reviewDisabledReason ? (
+          <p className="disabled-reason">{reviewDisabledReason}</p>
+        ) : null}
+        {phase ? <TransactionProgress action="transfer" phase={phase} /> : null}
         <p className="dashboard-status" aria-live="polite">
           {status}
         </p>

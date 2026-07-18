@@ -11,10 +11,13 @@ import {
   type StoredDemoSession,
 } from "../lib/demo-session";
 
+export type DemoAction = "start" | "goal" | "complete";
+
 export function DemoConsole() {
   const [session, setSession] = useState<StoredDemoSession | null>(null);
   const [status, setStatus] = useState("Ready for a synthetic Devnet match.");
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<DemoAction | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -34,7 +37,7 @@ export function DemoConsole() {
   }, []);
 
   const create = async () =>
-    run(async () => {
+    run("start", async () => {
       const result = await post<{
         id: string;
         campaign: string;
@@ -54,7 +57,7 @@ export function DemoConsole() {
       );
     });
   const goal = async () =>
-    run(async () => {
+    run("goal", async () => {
       if (!session) return;
       const result = await post<{ remainingGoals: number }>(
         `/v1/demo/sessions/${encodeURIComponent(session.id)}/goal`,
@@ -67,7 +70,7 @@ export function DemoConsole() {
       );
     });
   const complete = async () =>
-    run(async () => {
+    run("complete", async () => {
       if (!session) return;
       await post(
         `/v1/demo/sessions/${encodeURIComponent(session.id)}/complete`,
@@ -79,21 +82,18 @@ export function DemoConsole() {
         "Demo completion queued. Open rounds remain claimable until their on-chain timers close.",
       );
     });
-  async function run(work: () => Promise<void>) {
-    setBusy(true);
+  async function run(action: DemoAction, work: () => Promise<void>) {
+    setBusyAction(action);
+    setError(null);
     try {
       await work();
-    } catch (error) {
+    } catch (caught) {
       const message =
-        error instanceof Error ? error.message : "Demo request failed";
-      if (
-        message.toLowerCase().includes("capability expired") ||
-        message.toLowerCase().includes("no reward round remaining")
-      )
-        clearSession();
-      setStatus(message);
+        caught instanceof Error ? caught.message : "Demo request failed";
+      if (shouldClearDemoSession(message)) clearSession();
+      setError(message);
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
   function persistSession(next: StoredDemoSession) {
@@ -107,6 +107,7 @@ export function DemoConsole() {
     window.sessionStorage.removeItem(demoSessionStorageKey);
     setSession(null);
   }
+  const busy = busyAction !== null;
   return (
     <section className="demo-console">
       <div className="simulation-label">SIMULATED DEVNET EVENT</div>
@@ -121,6 +122,11 @@ export function DemoConsole() {
         instruction, then uses the same registration, receipt, settlement, SPL
         vault, and Claim PDA path.
       </p>
+      <p className="demo-controller-note">
+        Each Start creates a fresh 15-minute demo controller. When a previous
+        demo is completed or exhausted, GoalDrop can prepare a fresh funded
+        campaign while earlier claims and proofs remain auditable on Devnet.
+      </p>
       <div className="demo-timeline">
         <span className={session ? "done" : "active"}>1 · Session</span>
         <span className={session ? "active" : ""}>2 · Goal</span>
@@ -134,7 +140,7 @@ export function DemoConsole() {
           disabled={busy || Boolean(session)}
           onClick={() => void create()}
         >
-          {busy && !session ? "Preparing demo session…" : "Start demo session"}
+          {busyAction === "start" ? busyLabel("start") : "Start demo session"}
         </button>
         <button
           type="button"
@@ -142,8 +148,12 @@ export function DemoConsole() {
           disabled={busy || !session || session.remainingGoals === 0}
           onClick={() => void goal()}
         >
-          <span>GOAL</span>
-          <small>Open next funded round</small>
+          <span>{busyAction === "goal" ? "OPENING…" : "GOAL"}</span>
+          <small>
+            {busyAction === "goal"
+              ? busyLabel("goal")
+              : "Open next funded round"}
+          </small>
         </button>
         <button
           type="button"
@@ -151,22 +161,47 @@ export function DemoConsole() {
           disabled={busy || !session}
           onClick={() => void complete()}
         >
-          Complete demo match
+          {busyAction === "complete"
+            ? busyLabel("complete")
+            : "Complete demo match"}
         </button>
       </div>
       <p className="demo-status" aria-live="polite">
         {status}
       </p>
+      {error ? (
+        <div className="error-banner" role="alert">
+          <strong>Demo action failed</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
       {session ? (
         <Link className="proof-link" href={`/campaign/${session.campaign}`}>
           Open the live fan experience →
         </Link>
       ) : (
         <p className="demo-status">
-          A fresh funded campaign is prepared automatically when you start.
+          Start a controller to prepare or resume the available Devnet demo
+          campaign.
         </p>
       )}
     </section>
+  );
+}
+
+export function busyLabel(action: DemoAction): string {
+  return {
+    start: "Starting fresh controller…",
+    goal: "Submitting synthetic goal…",
+    complete: "Completing demo match…",
+  }[action];
+}
+
+export function shouldClearDemoSession(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("capability expired") ||
+    normalized.includes("no reward round remaining")
   );
 }
 

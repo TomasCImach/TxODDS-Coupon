@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
@@ -14,6 +14,12 @@ import { browserApiOrigin, readApiJson, type FixtureSummary } from "../lib/api";
 import { track } from "../lib/analytics";
 import { selectFundedSourceTokenAccount } from "../lib/source-token-account";
 import { parseTokenAmount } from "../lib/token-amount";
+import type {
+  TransactionAction,
+  TransactionPhase,
+} from "../lib/transaction-progress";
+import { transactionProgressSteps } from "../lib/transaction-progress";
+import { TransactionProgress } from "./transaction-progress";
 
 interface RoundDraft {
   reward: string;
@@ -49,6 +55,11 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
     "Connect the sponsor wallet to build the campaign transaction.",
   );
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{
+    action: TransactionAction;
+    phase: TransactionPhase;
+    requiresApproval: boolean;
+  } | null>(null);
   const [campaign, setCampaign] = useState<string | null>(null);
   const [sourceTokenSelection, setSourceTokenSelection] = useState({
     wallet: "",
@@ -216,28 +227,40 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       return;
     }
     setBusy(true);
+    setProgress({
+      action: "create",
+      phase: "preparing",
+      requiresApproval: true,
+    });
     track("sponsor_setup_started", {
       properties: { fixture_source: fixtures.length ? "txline" : "manual" },
     });
     try {
-      const result = await buildAndSubmit(wallet.signTransaction, "create", {
-        sponsor: wallet.publicKey.toBase58(),
-        refundWallet: refundWallet || wallet.publicKey.toBase58(),
-        fixtureId,
-        campaignNonce: String(BigInt(Date.now())),
-        scheduledStart: Math.floor(new Date(start).getTime() / 1_000),
-        registrationDeadline: Math.floor(deadline.getTime() / 1_000),
-        expectedEnd: Math.floor(new Date(start).getTime() / 1_000) + 10_800,
-        hardExpiry: Math.floor(new Date(start).getTime() / 1_000) + 28_800,
-        rounds: rounds.map((round) => ({
-          rewardAmount: parseTokenAmount(round.reward, decimals).toString(),
-          winnerCap: round.cap,
-        })),
-      });
+      const result = await buildAndSubmit(
+        wallet.signTransaction,
+        "create",
+        {
+          sponsor: wallet.publicKey.toBase58(),
+          refundWallet: refundWallet || wallet.publicKey.toBase58(),
+          fixtureId,
+          campaignNonce: String(BigInt(Date.now())),
+          scheduledStart: Math.floor(new Date(start).getTime() / 1_000),
+          registrationDeadline: Math.floor(deadline.getTime() / 1_000),
+          expectedEnd: Math.floor(new Date(start).getTime() / 1_000) + 10_800,
+          hardExpiry: Math.floor(new Date(start).getTime() / 1_000) + 28_800,
+          rounds: rounds.map((round) => ({
+            rewardAmount: parseTokenAmount(round.reward, decimals).toString(),
+            winnerCap: round.cap,
+          })),
+        },
+        true,
+        (phase) =>
+          setProgress({ action: "create", phase, requiresApproval: true }),
+      );
       setCampaign(String(result.campaign));
       setCampaignStage("draft");
       setStatus(
-        `Campaign ${short(String(result.campaign))} created. Fund the exact ${formatBaseUnits(liability, decimals)} GOAL liability next.`,
+        `Campaign ${short(String(result.campaign))} draft created. Fund the exact ${formatBaseUnits(liability, decimals)} GOAL liability to secure the fan rewards next.`,
       );
       track("campaign_created", {
         campaign: String(result.campaign),
@@ -247,6 +270,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       setStatus(message(error));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -258,6 +282,8 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       return;
     }
     setBusy(true);
+    const requiresApproval = action !== "refund";
+    setProgress({ action, phase: "preparing", requiresApproval });
     try {
       const result = await buildAndSubmit(
         wallet.signTransaction,
@@ -271,7 +297,8 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
           : action === "refund"
             ? { campaign }
             : { sponsor: wallet.publicKey.toBase58(), campaign },
-        action !== "refund",
+        requiresApproval,
+        (phase) => setProgress({ action, phase, requiresApproval }),
       );
       if (action === "fund") setCampaignStage("funded");
       if (action === "activate") setCampaignStage("active");
@@ -295,6 +322,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       setStatus(message(error));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -304,6 +332,11 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       return;
     }
     setBusy(true);
+    setProgress({
+      action: "faucet",
+      phase: "preparing",
+      requiresApproval: true,
+    });
     try {
       const built = await json<{
         templateId: string;
@@ -312,7 +345,17 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       const transaction = VersionedTransaction.deserialize(
         fromBase64(built.transaction),
       );
+      setProgress({
+        action: "faucet",
+        phase: "approval",
+        requiresApproval: true,
+      });
       const signed = await wallet.signTransaction(transaction);
+      setProgress({
+        action: "faucet",
+        phase: "submitting",
+        requiresApproval: true,
+      });
       const result = await json<Record<string, unknown>>("/v1/faucet/submit", {
         templateId: built.templateId,
         signedTransaction: toBase64(signed.serialize()),
@@ -328,6 +371,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
       setStatus(message(error));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -339,6 +383,89 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
   const utilization =
     required > 0n ? Number((paid * 10_000n) / required) / 100 : 0;
   const previewRound = rounds[0] ?? { reward: "0", cap: 0 };
+  const activeProgressLabel = progress
+    ? transactionProgressSteps(
+        progress.action,
+        progress.phase,
+        progress.requiresApproval,
+      ).find((step) => step.state === "current")?.label
+    : null;
+  const createDisabledReason = busy
+    ? "A sponsor transaction is already in progress."
+    : !wallet.publicKey
+      ? "Connect a sponsor wallet to create the campaign."
+      : !wallet.signTransaction
+        ? "Select a wallet that can sign the campaign transaction."
+        : !fixtureId
+          ? "Choose an available fixture for the campaign."
+          : !riskAccepted || !orderingAccepted
+            ? "Accept both campaign risks to continue."
+            : null;
+  const fundDisabledReason = busy
+    ? "Wait for the current transaction to finish."
+    : !campaign
+      ? "Enter or create a campaign first."
+      : !wallet.publicKey
+        ? "Connect the sponsor wallet that manages this campaign."
+        : !wallet.signTransaction
+          ? "Select a wallet that can sign the funding transaction."
+          : !sourceTokenAccount
+            ? "A funded classic SPL source token account is required."
+            : campaignStats
+              ? campaignStats.state !== "draft"
+                ? "Exact funding is only available while the campaign is a draft."
+                : null
+              : campaignStage === "active"
+                ? "An active campaign cannot be funded again."
+                : null;
+  const activateDisabledReason = busy
+    ? "Wait for the current transaction to finish."
+    : !campaign
+      ? "Enter or create a campaign first."
+      : !wallet.publicKey
+        ? "Connect the sponsor wallet that manages this campaign."
+        : !wallet.signTransaction
+          ? "Select a wallet that can sign the activation transaction."
+          : campaignStats
+            ? campaignStats.state !== "funded"
+              ? "Fund the exact reward liability before activation."
+              : null
+            : campaignStage === "active"
+              ? "This campaign is already active."
+              : null;
+  const cancelDisabledReason = busy
+    ? "Wait for the current transaction to finish."
+    : !campaign
+      ? "Enter or create a campaign first."
+      : !wallet.publicKey
+        ? "Connect the sponsor wallet that manages this campaign."
+        : !wallet.signTransaction
+          ? "Select a wallet that can sign the cancellation transaction."
+          : campaignStats
+            ? !["draft", "funded"].includes(campaignStats.state)
+              ? "Only draft or funded campaigns can be cancelled."
+              : null
+            : campaignStage === "active"
+              ? "An active campaign can no longer be cancelled here."
+              : null;
+  const refundDisabledReason = busy
+    ? "Wait for the current transaction to finish."
+    : !campaign
+      ? "Enter or create a campaign first."
+      : !wallet.publicKey
+        ? "Connect the sponsor wallet that manages this campaign."
+        : !wallet.signTransaction
+          ? "Select a transaction-capable sponsor wallet to request the refund."
+          : campaignStats?.state !== "refundable"
+            ? "Residual rewards become claimable only in the refundable state."
+            : null;
+  const faucetDisabledReason = busy
+    ? "Wait for the current transaction to finish."
+    : !wallet.publicKey
+      ? "Connect a sponsor wallet to request Devnet GOAL."
+      : !wallet.signTransaction
+        ? "Select a wallet that can sign the Devnet reward request."
+        : null;
 
   return (
     <div className="sponsor-shell">
@@ -378,7 +505,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                     name="fixture"
                     value={fixture.fixtureId}
                     checked={fixtureId === fixture.fixtureId}
-                    disabled={!fixture.fixtureSlotAvailable}
+                    disabled={busy || !fixture.fixtureSlotAvailable}
                     onChange={() => setFixtureId(fixture.fixtureId)}
                   />
                   <span>
@@ -412,6 +539,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
               aria-label="TxLINE fixture ID"
               placeholder="TxLINE fixture ID"
               value={fixtureId}
+              disabled={busy}
               onChange={(event) =>
                 setFixtureId(event.target.value.replace(/\D/g, ""))
               }
@@ -423,6 +551,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
               className="field"
               type="datetime-local"
               value={registrationDeadline}
+              disabled={busy}
               max={fixtureLocalDate(
                 fixtures.find((fixture) => fixture.fixtureId === fixtureId)
                   ?.scheduledStart,
@@ -466,6 +595,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                   aria-label={`Round ${index + 1} reward`}
                   inputMode="decimal"
                   value={round.reward}
+                  disabled={busy}
                   onChange={(event) =>
                     updateRound(index, { reward: event.target.value })
                   }
@@ -476,6 +606,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                   min={1}
                   max={100}
                   value={round.cap}
+                  disabled={busy}
                   onChange={(event) =>
                     updateRound(index, {
                       cap: Math.min(
@@ -500,7 +631,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
             type="button"
             className="text-button"
             onClick={addRound}
-            disabled={rounds.length >= 8}
+            disabled={busy || rounds.length >= 8}
           >
             + Add funded goal round
           </button>
@@ -550,7 +681,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
 
         <section className="dashboard-panel publish-panel">
           <span className="step-number">03</span>
-          <h2>Review and sign</h2>
+          <h2>Review the fan reward campaign</h2>
           <label className="input-label">
             Immutable refund wallet
             <input
@@ -559,6 +690,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                 wallet.publicKey?.toBase58() ?? "Connect sponsor wallet"
               }
               value={refundWallet}
+              disabled={busy}
               onChange={(event) => setRefundWallet(event.target.value)}
             />
           </label>
@@ -566,6 +698,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
             <input
               type="checkbox"
               checked={riskAccepted}
+              disabled={busy}
               onChange={(event) => setRiskAccepted(event.target.checked)}
             />
             <span>
@@ -577,6 +710,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
             <input
               type="checkbox"
               checked={orderingAccepted}
+              disabled={busy}
               onChange={(event) => setOrderingAccepted(event.target.checked)}
             />
             <span>
@@ -588,13 +722,23 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
           <button
             type="button"
             className="primary-button full"
-            disabled={
-              busy || !wallet.connected || !riskAccepted || !orderingAccepted
-            }
+            disabled={Boolean(createDisabledReason)}
             onClick={() => void create()}
           >
-            {busy ? "Waiting for wallet…" : "Create campaign transaction"}
+            {busy && progress?.action === "create"
+              ? activeProgressLabel
+              : "Create campaign draft"}
           </button>
+          {createDisabledReason ? (
+            <p className="disabled-reason">{createDisabledReason}</p>
+          ) : null}
+          {progress?.action === "create" ? (
+            <TransactionProgress
+              action={progress.action}
+              phase={progress.phase}
+              requiresApproval={progress.requiresApproval}
+            />
+          ) : null}
           <p className="dashboard-status" aria-live="polite">
             {status}
           </p>
@@ -604,6 +748,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
               <input
                 className="field"
                 value={campaign ?? ""}
+                disabled={busy}
                 onChange={(event) => {
                   setCampaign(event.target.value.trim() || null);
                   setCampaignStage("none");
@@ -616,6 +761,7 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
               <input
                 className="field"
                 value={sourceTokenAccount}
+                disabled={busy}
                 onChange={(event) =>
                   setSourceTokenSelection({
                     wallet: sponsorAddress,
@@ -630,69 +776,65 @@ export function SponsorDashboard({ fixtures }: { fixtures: FixtureSummary[] }) {
                 real assets.
               </small>
             </label>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy || !wallet.connected || !wallet.signTransaction}
-              onClick={() => void claimFaucetTokens()}
-            >
-              Get 500 free Devnet GOAL
-            </button>
+            <ActionControl reason={faucetDisabledReason}>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={Boolean(faucetDisabledReason)}
+                onClick={() => void claimFaucetTokens()}
+              >
+                Get 500 free Devnet GOAL
+              </button>
+            </ActionControl>
             <div className="lifecycle-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={
-                  busy ||
-                  !campaign ||
-                  !sourceTokenAccount ||
-                  (campaignStats
-                    ? campaignStats.state !== "draft"
-                    : campaignStage === "active")
-                }
-                onClick={() => void campaignAction("fund")}
-              >
-                Fund exact liability
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={
-                  busy ||
-                  !campaign ||
-                  (campaignStats
-                    ? campaignStats.state !== "funded"
-                    : campaignStage === "active")
-                }
-                onClick={() => void campaignAction("activate")}
-              >
-                Activate
-              </button>
-              <button
-                type="button"
-                className="text-button danger"
-                disabled={
-                  busy ||
-                  !campaign ||
-                  (campaignStats
-                    ? !["draft", "funded"].includes(campaignStats.state)
-                    : campaignStage === "active")
-                }
-                onClick={() => void campaignAction("cancel")}
-              >
-                Cancel before kickoff
-              </button>
-              <button
-                type="button"
-                className="text-button"
-                disabled={
-                  busy || !campaign || campaignStats?.state !== "refundable"
-                }
-                onClick={() => void campaignAction("refund")}
-              >
-                Claim refundable residual
-              </button>
+              <ActionControl reason={fundDisabledReason}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={Boolean(fundDisabledReason)}
+                  onClick={() => void campaignAction("fund")}
+                >
+                  Fund fan reward liability
+                </button>
+              </ActionControl>
+              <ActionControl reason={activateDisabledReason}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={Boolean(activateDisabledReason)}
+                  onClick={() => void campaignAction("activate")}
+                >
+                  Open rewards to fans
+                </button>
+              </ActionControl>
+              <ActionControl reason={cancelDisabledReason}>
+                <button
+                  type="button"
+                  className="text-button danger"
+                  disabled={Boolean(cancelDisabledReason)}
+                  onClick={() => void campaignAction("cancel")}
+                >
+                  Cancel before kickoff
+                </button>
+              </ActionControl>
+              <ActionControl reason={refundDisabledReason}>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={Boolean(refundDisabledReason)}
+                  onClick={() => void campaignAction("refund")}
+                >
+                  Return unused rewards
+                </button>
+              </ActionControl>
             </div>
+            {progress && progress.action !== "create" ? (
+              <TransactionProgress
+                action={progress.action}
+                phase={progress.phase}
+                requiresApproval={progress.requiresApproval}
+              />
+            ) : null}
             {campaign ? (
               <a className="proof-link" href={`/campaign/${campaign}`}>
                 Open campaign view →
@@ -785,6 +927,7 @@ async function buildAndSubmit(
   action: string,
   payload: unknown,
   requiresWalletSignature = true,
+  onPhase?: (phase: TransactionPhase) => void,
 ): Promise<Record<string, unknown>> {
   const built = await json<{ templateId: string; transaction: string }>(
     `/v1/sponsor/transactions/${action}`,
@@ -793,13 +936,29 @@ async function buildAndSubmit(
   const transaction = VersionedTransaction.deserialize(
     fromBase64(built.transaction),
   );
+  if (requiresWalletSignature) onPhase?.("approval");
   const signed = requiresWalletSignature
     ? await signTransaction(transaction)
     : transaction;
+  onPhase?.("submitting");
   return json("/v1/sponsor/transactions/submit", {
     templateId: built.templateId,
     signedTransaction: toBase64(signed.serialize()),
   });
+}
+function ActionControl({
+  children,
+  reason,
+}: {
+  children: ReactNode;
+  reason: string | null;
+}) {
+  return (
+    <div className="action-control">
+      {children}
+      {reason ? <small className="disabled-reason">{reason}</small> : null}
+    </div>
+  );
 }
 async function json<T>(path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${browserApiOrigin}${path}`, {

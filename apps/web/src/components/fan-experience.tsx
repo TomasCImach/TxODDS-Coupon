@@ -10,7 +10,9 @@ import {
 } from "../lib/api";
 import { useFanSigner, WalletChoices } from "../app/providers";
 import { TransferPanel } from "./transfer-panel";
+import { TransactionProgress } from "./transaction-progress";
 import { track } from "../lib/analytics";
+import type { TransactionPhase } from "../lib/transaction-progress";
 
 type RegistrationState =
   "not-registered" | "signing" | "registering" | "confirmed" | "error";
@@ -32,6 +34,9 @@ export function FanExperience({
   );
   const [registration, setRegistration] =
     useState<RegistrationState>("not-registered");
+  const [registrationPhase, setRegistrationPhase] =
+    useState<TransactionPhase | null>(null);
+  const [claimPhase, setClaimPhase] = useState<TransactionPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{
     id: string;
@@ -52,6 +57,11 @@ export function FanExperience({
   const registrationStartedAt = useRef<number | null>(null);
   const claimStartedAt = useRef<number | null>(null);
   const trackedRegistration = useRef(false);
+  const claimInFlightRef = useRef(false);
+  const updateClaimPhase = useCallback((phase: TransactionPhase | null) => {
+    claimInFlightRef.current = phase !== null;
+    setClaimPhase(phase);
+  }, []);
 
   useEffect(() => {
     track("campaign_viewed", {
@@ -93,10 +103,12 @@ export function FanExperience({
       `${browserApiOrigin}/v1/campaigns/${campaign.campaign}/events`,
     );
     source.addEventListener("goal.detected", () => {
+      if (!shouldAutoFocusRound(claimInFlightRef.current)) return;
       setRaceState("opening");
       setWinner(null);
       if (openingTimer.current) clearTimeout(openingTimer.current);
       openingTimer.current = setTimeout(() => {
+        if (!shouldAutoFocusRound(claimInFlightRef.current)) return;
         setRaceState("error");
         setError(
           "The goal was detected, but no confirmed Devnet round opened within ten seconds.",
@@ -127,6 +139,7 @@ export function FanExperience({
           round,
         ],
       }));
+      if (!shouldAutoFocusRound(claimInFlightRef.current)) return;
       setFocusedRound(round);
       setRaceState("open");
       setReceipt(null);
@@ -140,6 +153,7 @@ export function FanExperience({
         payload.wallet === signer.address
       ) {
         setRegistration("confirmed");
+        setRegistrationPhase(null);
         if (!trackedRegistration.current) {
           track("registration_completed", {
             campaign: campaign.campaign,
@@ -160,6 +174,7 @@ export function FanExperience({
       ) as Record<string, unknown>;
       if (payload.wallet === signer.address) {
         setRaceState("confirmed");
+        updateClaimPhase(null);
         setWinner({
           rank: Number(payload.winnerRank),
           explorer: `https://explorer.solana.com/tx/${String(payload.transactionSignature)}?cluster=devnet`,
@@ -181,6 +196,7 @@ export function FanExperience({
       ) as Record<string, unknown>;
       if (payload.wallet === signer.address) {
         setRaceState(payload.status === "expired" ? "expired" : "missed");
+        updateClaimPhase(null);
         track("claim_missed", {
           campaign: campaign.campaign,
           properties: { reason: String(payload.status) },
@@ -196,7 +212,7 @@ export function FanExperience({
       window.location.reload();
     });
     return () => source.close();
-  }, [campaign.campaign, signer.address, signer.mode]);
+  }, [campaign.campaign, signer.address, signer.mode, updateClaimPhase]);
 
   const beginRegistrationPoll = useCallback(
     (wallet: string, retryNetworkErrors = false) => {
@@ -224,6 +240,7 @@ export function FanExperience({
           if (generation !== registrationPollGeneration.current) return;
           if (result.registered) {
             setRegistration("confirmed");
+            setRegistrationPhase(null);
             setError(null);
             return;
           }
@@ -234,6 +251,7 @@ export function FanExperience({
           }
           if (result.status === "expired" || result.status === "failed") {
             setRegistration("error");
+            setRegistrationPhase(null);
             setError(
               result.status === "expired"
                 ? "Registration expired before it reached Devnet. Try Join again."
@@ -242,6 +260,7 @@ export function FanExperience({
             return;
           }
           setRegistration("not-registered");
+          setRegistrationPhase(null);
         } catch {
           if (retryNetworkErrors) schedule(1_500);
         }
@@ -319,13 +338,16 @@ export function FanExperience({
     });
     setError(null);
     setRegistration("signing");
+    setRegistrationPhase("preparing");
     try {
       const challenge = await postJson<IntentChallenge>(
         "/v1/intents/registration",
         { campaign: campaign.campaign, wallet: signer.address },
       );
+      setRegistrationPhase("approval");
       const signature = await signer.signDigest(fromHex(challenge.intentHash));
       setRegistration("registering");
+      setRegistrationPhase("submitting");
       const result = await postJson<{ status: string }>("/v1/registrations", {
         campaign: campaign.campaign,
         wallet: signer.address,
@@ -334,11 +356,13 @@ export function FanExperience({
         intentHash: challenge.intentHash,
         signature: toBase64(signature),
       });
-      if (result.status === "confirmed" || result.status === "finalized")
+      if (result.status === "confirmed" || result.status === "finalized") {
         setRegistration("confirmed");
-      else beginRegistrationPoll(signer.address, true);
+        setRegistrationPhase(null);
+      } else beginRegistrationPoll(signer.address, true);
     } catch (caught) {
       setRegistration("error");
+      setRegistrationPhase(null);
       setError(message(caught));
     }
   }, [beginRegistrationPoll, campaign.campaign, signer]);
@@ -356,6 +380,7 @@ export function FanExperience({
       }>(response, "Could not refresh receipt status");
       if (status.status === "confirmed" || status.status === "finalized") {
         setRaceState("confirmed");
+        updateClaimPhase(null);
         setWinner({
           rank: status.winnerRank ?? 0,
           explorer: status.explorer ?? "",
@@ -374,6 +399,7 @@ export function FanExperience({
               ? "missed"
               : "error",
         );
+        updateClaimPhase(null);
         return;
       }
       setRaceState(status.status === "submitted" ? "pending" : "accepted");
@@ -399,13 +425,16 @@ export function FanExperience({
       },
     });
     setError(null);
+    updateClaimPhase("preparing");
     try {
       const challenge = await postJson<IntentChallenge>("/v1/intents/claim", {
         campaign: campaign.campaign,
         round: focusedRound.round,
         wallet: signer.address,
       });
+      updateClaimPhase("approval");
       const signature = await signer.signDigest(fromHex(challenge.intentHash));
+      updateClaimPhase("submitting");
       const accepted = await postJson<{
         receiptId: string;
         capability: string;
@@ -434,6 +463,7 @@ export function FanExperience({
       }, 400);
     } catch (caught) {
       setRaceState("error");
+      updateClaimPhase(null);
       setError(message(caught));
     }
   };
@@ -443,6 +473,15 @@ export function FanExperience({
     setReducedMotion(next);
     localStorage.setItem("goaldrop.reduced-motion", String(next));
   };
+
+  const { current: currentRounds, past: pastRounds } = partitionRounds(
+    campaign.rounds,
+  );
+  const upcomingRounds = campaign.configuredRounds.slice(
+    campaign.rounds.length,
+  );
+  const transactionInFlight = registrationPhase !== null || claimPhase !== null;
+  const roundSelectionLocked = isRoundSelectionLocked(claimPhase);
 
   return (
     <div className={embedded ? "fan-experience embedded" : "fan-experience"}>
@@ -480,6 +519,13 @@ export function FanExperience({
         </p>
       </div>
 
+      {error ? (
+        <div className="error-banner" role="alert">
+          <strong>Action needs attention</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       <GoalRace
         state={displayRaceState}
         source={focusedRound?.source ?? "live"}
@@ -491,11 +537,25 @@ export function FanExperience({
         explorerUrl={winner?.explorer}
         reducedMotion={reducedMotion}
         action={
-          displayRaceState === "open" ? (
+          claimPhase ? (
+            <div className="fan-transaction-progress">
+              <p className="section-kicker">Claim in progress</p>
+              <TransactionProgress action="claim" phase={claimPhase} />
+              {receipt ? (
+                <p className="receipt-note">
+                  Receipt {short(receipt.id)} · This is not a win confirmation.
+                </p>
+              ) : null}
+            </div>
+          ) : displayRaceState === "open" ? (
             <button
               type="button"
               className="claim-button"
-              disabled={registration !== "confirmed" || !signer.canSignMessage}
+              disabled={
+                registration !== "confirmed" ||
+                !signer.canSignMessage ||
+                transactionInFlight
+              }
               onClick={() => void claim()}
             >
               <span>Claim reward</span>
@@ -522,34 +582,44 @@ export function FanExperience({
               : "Register once. Race every goal."}
           </h2>
         </div>
-        <WalletChoices />
+        <fieldset
+          className="identity-lock"
+          disabled={transactionInFlight}
+          aria-label="Choose your fan identity"
+        >
+          <WalletChoices />
+        </fieldset>
         <button
           type="button"
           className="join-button"
           disabled={
             !signer.connected ||
+            transactionInFlight ||
             ["signing", "registering", "confirmed"].includes(registration)
           }
           onClick={() => void register()}
         >
-          {registration === "signing"
-            ? "Approve registration…"
-            : registration === "registering"
-              ? "Confirming on Devnet…"
-              : registration === "confirmed"
-                ? "Registered ✓"
-                : "Join this match — free"}
+          {registrationPhase === "preparing"
+            ? "Preparing registration…"
+            : registrationPhase === "approval"
+              ? "Approve registration signature…"
+              : registrationPhase === "submitting"
+                ? "Submitting & confirming…"
+                : registration === "confirmed"
+                  ? "Registered ✓"
+                  : "Join this match — free"}
         </button>
+        {registrationPhase ? (
+          <TransactionProgress
+            action="registration"
+            phase={registrationPhase}
+          />
+        ) : null}
         <ul className="trust-list">
           <li>No SOL required</li>
           <li>One registration per wallet</li>
           <li>Rewards settle on Solana Devnet</li>
         </ul>
-        {error ? (
-          <p className="inline-error" role="alert">
-            {error}
-          </p>
-        ) : null}
       </aside>
 
       <section className="round-strip" aria-label="Campaign rounds">
@@ -560,46 +630,124 @@ export function FanExperience({
             rounds opened
           </h2>
         </div>
-        <div className="round-list">
-          {campaign.rounds.map((round) => (
-            <button
-              type="button"
-              key={round.round}
-              className={
-                focusedRound?.round === round.round
-                  ? "round-chip active"
-                  : "round-chip"
-              }
-              onClick={() => {
-                setFocusedRound(round);
-                setRaceState(focusedRoundState(round));
-              }}
-            >
-              <span>
-                Round {round.ordinal + 1} · {round.source}
-              </span>
-              <strong>{round.state}</strong>
-              <small>
-                {round.winnerCount}/{round.winnerCap} winners
-              </small>
-            </button>
-          ))}
-          {campaign.configuredRounds
-            .slice(campaign.rounds.length)
-            .map((round) => (
-              <div
-                className="round-chip planned"
-                key={`planned-${round.ordinal}`}
-              >
-                <span>Round {round.ordinal + 1} · funded</span>
-                <strong>{formatTokenAmount(round.rewardAmount)} GOAL</strong>
-                <small>{round.winnerCap} winner cap · awaiting goal</small>
-              </div>
-            ))}
+        <div className="round-group">
+          <h3>Current rounds</h3>
+          <div className="round-list">
+            {currentRounds.length ? (
+              currentRounds.map((round) => (
+                <RoundButton
+                  key={round.round}
+                  round={round}
+                  active={focusedRound?.round === round.round}
+                  disabled={roundSelectionLocked}
+                  onSelect={() => {
+                    setFocusedRound(round);
+                    setRaceState(focusedRoundState(round));
+                  }}
+                />
+              ))
+            ) : (
+              <p className="empty-rounds">No reward round is open right now.</p>
+            )}
+          </div>
         </div>
+        <div className="round-group">
+          <h3>Upcoming funded rounds</h3>
+          <div className="round-list">
+            {upcomingRounds.length ? (
+              upcomingRounds.map((round) => (
+                <div
+                  className="round-chip planned"
+                  key={`planned-${round.ordinal}`}
+                >
+                  <span>Round {round.ordinal + 1} · funded</span>
+                  <strong>{formatTokenAmount(round.rewardAmount)} GOAL</strong>
+                  <small>{round.winnerCap} winner cap · awaiting goal</small>
+                </div>
+              ))
+            ) : (
+              <p className="empty-rounds">All funded rounds have opened.</p>
+            )}
+          </div>
+        </div>
+        <details className="past-rounds">
+          <summary>Past rounds ({pastRounds.length})</summary>
+          <div className="round-list">
+            {pastRounds.length ? (
+              pastRounds.map((round) => (
+                <RoundButton
+                  key={round.round}
+                  round={round}
+                  active={focusedRound?.round === round.round}
+                  disabled={roundSelectionLocked}
+                  onSelect={() => {
+                    setFocusedRound(round);
+                    setRaceState(focusedRoundState(round));
+                  }}
+                />
+              ))
+            ) : (
+              <p className="empty-rounds">No rounds have closed yet.</p>
+            )}
+          </div>
+        </details>
       </section>
       <TransferPanel refreshKey={winner?.explorer ?? ""} />
     </div>
+  );
+}
+
+function RoundButton({
+  round,
+  active,
+  disabled,
+  onSelect,
+}: {
+  round: CampaignRound;
+  active: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? "round-chip active" : "round-chip"}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onSelect();
+      }}
+    >
+      <span>
+        Round {round.ordinal + 1} · {round.source}
+      </span>
+      <strong>{round.state}</strong>
+      <small>
+        {round.winnerCount}/{round.winnerCap} winners
+      </small>
+    </button>
+  );
+}
+
+export function isRoundSelectionLocked(
+  claimPhase: TransactionPhase | null,
+): boolean {
+  return claimPhase !== null;
+}
+
+export function shouldAutoFocusRound(claimInFlight: boolean): boolean {
+  return !claimInFlight;
+}
+
+export function partitionRounds(rounds: CampaignRound[]): {
+  current: CampaignRound[];
+  past: CampaignRound[];
+} {
+  return rounds.reduce<{ current: CampaignRound[]; past: CampaignRound[] }>(
+    (groups, round) => {
+      groups[round.state === "open" ? "current" : "past"].push(round);
+      return groups;
+    },
+    { current: [], past: [] },
   );
 }
 
