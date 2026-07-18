@@ -15,13 +15,10 @@ import {
   WalletProvider as SolanaWalletProvider,
   useWallet,
 } from "@solana/wallet-adapter-react";
-import {
-  WalletModalProvider,
-  WalletMultiButton,
-} from "@solana/wallet-adapter-react-ui";
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import {
   WalletProvider as PasskeyWalletProvider,
-  WalletWidget,
+  useWallet as usePasskeyWallet,
 } from "@passkeys/react";
 import { createWallet } from "@passkeys/core";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
@@ -57,6 +54,7 @@ interface FanSignerValue {
 }
 
 const FanSignerContext = createContext<FanSignerValue | null>(null);
+const PasskeySurfaceContext = createContext<(() => void) | null>(null);
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [embeddedWallet, setEmbeddedWallet] = useState<EmbeddedWallet | null>(
@@ -79,16 +77,70 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
   const content = embeddedWallet ? (
     <PasskeyWalletProvider wallet={embeddedWallet}>
-      <WalletWidget
-        theme={{ variant: "dark", colors: { accentColor: "#a7ff45" } }}
-        experimental_mode="modal"
-      />
-      <StandardSolanaLayer>{children}</StandardSolanaLayer>
+      <PasskeySurface>
+        <StandardSolanaLayer>{children}</StandardSolanaLayer>
+      </PasskeySurface>
     </PasskeyWalletProvider>
   ) : (
     <StandardSolanaLayer>{children}</StandardSolanaLayer>
   );
   return content;
+}
+
+function PasskeySurface({ children }: { children: ReactNode }) {
+  const wallet = usePasskeyWallet();
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const openSurface = useCallback(() => {
+    setOpen(true);
+    wallet.experimental_expand({});
+  }, [wallet]);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    wallet.setWidgetConfig({
+      theme: { variant: "dark", colors: { accentColor: "#a7ff45" } },
+      size: "medium",
+      shape: "rounded",
+      compact: false,
+      noAutoCompact: false,
+      smallScreen: window.matchMedia("(max-width: 540px)").matches,
+    });
+    wallet.renderWidget(host);
+    const synchronizeVisibility = (event: MessageEvent) => {
+      if (
+        event.data?.type === "wallet:resize" &&
+        (event.origin === window.location.origin ||
+          event.origin === "https://embedded.passkeys.foundation")
+      )
+        setOpen(Boolean(event.data.expanded));
+    };
+    const closeAfterConnect = () => setOpen(false);
+    window.addEventListener("message", synchronizeVisibility);
+    window.addEventListener("wallet:connected", closeAfterConnect);
+    return () => {
+      window.removeEventListener("message", synchronizeVisibility);
+      window.removeEventListener("wallet:connected", closeAfterConnect);
+      wallet.renderWidget(null);
+    };
+  }, [wallet]);
+  return (
+    <PasskeySurfaceContext.Provider value={openSurface}>
+      {children}
+      <div
+        className={`passkey-surface${open ? " passkey-surface-open" : ""}`}
+        aria-hidden={!open}
+      >
+        <div
+          ref={hostRef}
+          className="passkey-surface-host"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Passkey wallet"
+        />
+      </div>
+    </PasskeySurfaceContext.Provider>
+  );
 }
 
 function StandardSolanaLayer({ children }: { children: ReactNode }) {
@@ -254,8 +306,51 @@ export function useFanSigner(): FanSignerValue {
 
 export function WalletChoices() {
   const signer = useFanSigner();
+  const wallet = useWallet();
+  const openPasskeySurface = useContext(PasskeySurfaceContext);
   const trackedMode = useRef<WalletMode>(null);
   const [copied, setCopied] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [showExternalWallets, setShowExternalWallets] = useState(false);
+  const [pendingWallet, setPendingWallet] = useState<string | null>(null);
+  const passkeyWallet = wallet.wallets.find((candidate) =>
+    candidate.adapter.name.toLowerCase().includes("passkey"),
+  );
+  const externalWallets = wallet.wallets.filter(
+    (candidate) => candidate !== passkeyWallet,
+  );
+  const reportConnectionError = useCallback((error: unknown) => {
+    setConnectError(
+      error instanceof Error ? error.message : "Wallet connection failed.",
+    );
+  }, []);
+  const chooseWallet = useCallback(
+    (walletName: (typeof wallet.wallets)[number]["adapter"]["name"]) => {
+      setConnectError(null);
+      setShowExternalWallets(false);
+      if (wallet.wallet?.adapter.name === walletName && !wallet.connecting) {
+        setPendingWallet(null);
+        void wallet.connect().catch(reportConnectionError);
+        return;
+      }
+      setPendingWallet(walletName);
+      wallet.select(walletName);
+    },
+    [reportConnectionError, wallet],
+  );
+  useEffect(() => {
+    if (
+      !pendingWallet ||
+      wallet.wallet?.adapter.name !== pendingWallet ||
+      wallet.connecting
+    )
+      return;
+    const frame = requestAnimationFrame(() => {
+      setPendingWallet(null);
+      void wallet.connect().catch(reportConnectionError);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingWallet, reportConnectionError, wallet]);
   useEffect(() => {
     if (signer.mode && trackedMode.current !== signer.mode) {
       track("wallet_path_selected", { properties: { method: signer.mode } });
@@ -316,7 +411,58 @@ export function WalletChoices() {
   }
   return (
     <div className="wallet-choices">
-      <WalletMultiButton>Continue with passkey or wallet</WalletMultiButton>
+      <button
+        type="button"
+        className="primary-button"
+        disabled={!passkeyWallet || !openPasskeySurface}
+        onClick={() => {
+          if (!passkeyWallet || !openPasskeySurface) {
+            setConnectError(
+              "Passkey wallet is still loading. Please try again.",
+            );
+            return;
+          }
+          openPasskeySurface();
+          chooseWallet(passkeyWallet.adapter.name);
+        }}
+      >
+        Continue with passkey
+      </button>
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => {
+          setConnectError(null);
+          if (externalWallets.length === 0) {
+            setConnectError(
+              "No browser wallet detected. Use a passkey or Instant Demo instead.",
+            );
+            return;
+          }
+          if (externalWallets.length === 1) {
+            const [onlyWallet] = externalWallets;
+            if (onlyWallet) chooseWallet(onlyWallet.adapter.name);
+            return;
+          }
+          setShowExternalWallets((current) => !current);
+        }}
+      >
+        Use installed wallet
+      </button>
+      {showExternalWallets ? (
+        <div className="external-wallet-list" aria-label="Installed wallets">
+          {externalWallets.map((candidate) => (
+            <button
+              type="button"
+              className="secondary-button"
+              key={candidate.adapter.name}
+              onClick={() => chooseWallet(candidate.adapter.name)}
+            >
+              {candidate.adapter.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {signer.instantDemoEnabled ? (
         <button
           type="button"
@@ -325,6 +471,11 @@ export function WalletChoices() {
         >
           Instant Demo — no extension
         </button>
+      ) : null}
+      {connectError ? (
+        <p className="inline-error" role="alert">
+          {connectError}
+        </p>
       ) : null}
       <p>
         {signer.instantDemoEnabled

@@ -237,6 +237,40 @@ h1 {
   padding-left: 12px;
 }
 
+.passkey-surface {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    visibility 180ms ease;
+}
+.passkey-surface-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.passkey-surface-host {
+  width: min(400px, 100%);
+  height: min(672px, calc(100dvh - 40px));
+  overflow: hidden;
+  border-radius: 32px;
+  background: #181818;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.external-wallet-list {
+  display: grid;
+  gap: 8px;
+}
+
 .hero {
   min-height: 640px;
   display: grid;
