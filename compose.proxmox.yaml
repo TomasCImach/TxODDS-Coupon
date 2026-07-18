@@ -1,0 +1,42 @@
+x-db-environment: &db-environment
+  DATABASE_URL: postgres://goaldrop:${POSTGRES_PASSWORD}@postgres:5432/goaldrop
+  DATABASE_POOL_SIZE: "5"
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports: !reset []
+    restart: unless-stopped
+
+  api:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment
+    ports: !override
+      - "127.0.0.1:4000:4000"
+
+  txline-listener:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment
+
+  oracle-worker:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment
+
+  settlement-worker:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment
+
+  chain-indexer:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment
+
+  demo-controller:
+    image: goaldrop-service:${GOALDROP_IMAGE_TAG:-devnet}
+    environment:
+      <<: *db-environment

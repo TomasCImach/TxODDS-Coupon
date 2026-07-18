@@ -215,11 +215,25 @@ async function reconcileAccounts(
       broadAccountScanEnabled = false;
     }
   }
-  if (!broadAccountScanEnabled && config.DEMO_CAMPAIGN) {
-    const pubkey = new PublicKey(config.DEMO_CAMPAIGN);
-    const account = await connection.getAccountInfo(pubkey, "confirmed");
-    if (account?.owner.equals(programId) && account.data.length === 424)
-      campaigns = [{ pubkey, account }];
+  if (!broadAccountScanEnabled) {
+    const managed = await pool.query<{ campaign: string }>(
+      `SELECT campaign FROM demo_campaigns
+       UNION SELECT $1 WHERE $1::text IS NOT NULL`,
+      [config.DEMO_CAMPAIGN ?? null],
+    );
+    const addresses = managed.rows.map((row) => new PublicKey(row.campaign));
+    if (addresses.length > 0) {
+      const accounts = await connection.getMultipleAccountsInfo(
+        addresses,
+        "confirmed",
+      );
+      campaigns = addresses.flatMap((pubkey, index) => {
+        const account = accounts[index];
+        return account?.owner.equals(programId) && account.data.length === 424
+          ? [{ pubkey, account }]
+          : [];
+      });
+    }
   }
   for (const item of campaigns) {
     const campaign = decodeCampaignAccount(item.account.data);

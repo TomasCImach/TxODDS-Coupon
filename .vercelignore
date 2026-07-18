@@ -1,0 +1,11 @@
+.anchor/
+.env*
+.next/
+.turbo/
+.vercel/
+coverage/
+node_modules/
+playwright-report/
+target/
+test-ledger/
+test-results/
