@@ -60,7 +60,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [embeddedWallet, setEmbeddedWallet] = useState<EmbeddedWallet | null>(
     null,
   );
+  const passkeyProviderEnabled =
+    process.env.NODE_ENV !== "production" ||
+    Boolean(process.env.NEXT_PUBLIC_PASSKEY_APP_ID?.trim());
   useEffect(() => {
+    if (!passkeyProviderEnabled) return;
     const { appId } = resolvePasskeyDeploymentConfig({
       deploymentTier: process.env.NEXT_PUBLIC_DEPLOYMENT_TIER,
       appId: process.env.NEXT_PUBLIC_PASSKEY_APP_ID,
@@ -74,7 +78,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       );
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [passkeyProviderEnabled]);
   const content = embeddedWallet ? (
     <PasskeyWalletProvider wallet={embeddedWallet}>
       <PasskeySurface>
@@ -313,6 +317,9 @@ export function WalletChoices() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [showExternalWallets, setShowExternalWallets] = useState(false);
   const [pendingWallet, setPendingWallet] = useState<string | null>(null);
+  const passkeyProviderEnabled =
+    process.env.NODE_ENV !== "production" ||
+    Boolean(process.env.NEXT_PUBLIC_PASSKEY_APP_ID?.trim());
   const passkeyWallet = wallet.wallets.find((candidate) =>
     candidate.adapter.name.toLowerCase().includes("passkey"),
   );
@@ -409,12 +416,24 @@ export function WalletChoices() {
       </div>
     );
   }
+  const instantDemoButton = signer.instantDemoEnabled ? (
+    <button
+      type="button"
+      className={passkeyProviderEnabled ? "secondary-button" : "primary-button"}
+      onClick={signer.connectInstantDemo}
+    >
+      Instant Demo — no extension
+    </button>
+  ) : null;
   return (
     <div className="wallet-choices">
+      {!passkeyProviderEnabled ? instantDemoButton : null}
       <button
         type="button"
         className="primary-button"
-        disabled={!passkeyWallet || !openPasskeySurface}
+        disabled={
+          !passkeyProviderEnabled || !passkeyWallet || !openPasskeySurface
+        }
         onClick={() => {
           if (!passkeyWallet || !openPasskeySurface) {
             setConnectError(
@@ -426,7 +445,9 @@ export function WalletChoices() {
           chooseWallet(passkeyWallet.adapter.name);
         }}
       >
-        Continue with passkey
+        {passkeyProviderEnabled
+          ? "Continue with passkey"
+          : "Passkey unavailable on this deployment"}
       </button>
       <button
         type="button"
@@ -463,14 +484,12 @@ export function WalletChoices() {
           ))}
         </div>
       ) : null}
-      {signer.instantDemoEnabled ? (
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={signer.connectInstantDemo}
-        >
-          Instant Demo — no extension
-        </button>
+      {passkeyProviderEnabled ? instantDemoButton : null}
+      {!passkeyProviderEnabled ? (
+        <p className="inline-error" role="status">
+          Passkeys require provider activation for this domain. Use your
+          installed wallet or Instant Demo.
+        </p>
       ) : null}
       {connectError ? (
         <p className="inline-error" role="alert">
