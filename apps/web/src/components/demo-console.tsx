@@ -1,22 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { browserApiOrigin, readApiJson } from "../lib/api";
 import { track } from "../lib/analytics";
+import {
+  demoSessionStorageKey,
+  parseStoredDemoSession,
+  serializeDemoSession,
+  type StoredDemoSession,
+} from "../lib/demo-session";
 
-export function DemoConsole({ campaign }: { campaign: string | null }) {
-  const [session, setSession] = useState<string | null>(null);
+export function DemoConsole() {
+  const [session, setSession] = useState<StoredDemoSession | null>(null);
   const [status, setStatus] = useState("Ready for a synthetic Devnet match.");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const restored = parseStoredDemoSession(
+        window.sessionStorage.getItem(demoSessionStorageKey),
+      );
+      if (restored) {
+        setSession(restored);
+        setStatus(
+          "Your active demo session was restored. Continue with the next goal.",
+        );
+      } else {
+        window.sessionStorage.removeItem(demoSessionStorageKey);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const create = async () =>
     run(async () => {
-      const result = await post<{ id: string; campaign: string }>(
-        "/v1/demo/sessions",
-        {},
-      );
+      const result = await post<{
+        id: string;
+        campaign: string;
+        expiresInSeconds: number;
+        remainingGoals: number;
+      }>("/v1/demo/sessions", {});
+      const created = {
+        id: result.id,
+        campaign: result.campaign,
+        expiresAt: Date.now() + result.expiresInSeconds * 1_000,
+        remainingGoals: result.remainingGoals,
+      };
       track("demo_session_started", { campaign: result.campaign });
-      setSession(result.id);
+      persistSession(created);
       setStatus(
         "Demo capability active for 15 minutes. Open the fan view, then trigger a goal.",
       );
@@ -24,8 +56,12 @@ export function DemoConsole({ campaign }: { campaign: string | null }) {
   const goal = async () =>
     run(async () => {
       if (!session) return;
-      await post(`/v1/demo/sessions/${encodeURIComponent(session)}/goal`, {});
-      track("demo_goal_triggered", { ...(campaign ? { campaign } : {}) });
+      const result = await post<{ remainingGoals: number }>(
+        `/v1/demo/sessions/${encodeURIComponent(session.id)}/goal`,
+        {},
+      );
+      track("demo_goal_triggered", { campaign: session.campaign });
+      persistSession({ ...session, remainingGoals: result.remainingGoals });
       setStatus(
         "Synthetic goal accepted. The demo authority is opening a real on-chain reward round.",
       );
@@ -34,11 +70,11 @@ export function DemoConsole({ campaign }: { campaign: string | null }) {
     run(async () => {
       if (!session) return;
       await post(
-        `/v1/demo/sessions/${encodeURIComponent(session)}/complete`,
+        `/v1/demo/sessions/${encodeURIComponent(session.id)}/complete`,
         {},
       );
-      track("demo_completed", { ...(campaign ? { campaign } : {}) });
-      setSession(null);
+      track("demo_completed", { campaign: session.campaign });
+      clearSession();
       setStatus(
         "Demo completion queued. Open rounds remain claimable until their on-chain timers close.",
       );
@@ -48,10 +84,28 @@ export function DemoConsole({ campaign }: { campaign: string | null }) {
     try {
       await work();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Demo request failed");
+      const message =
+        error instanceof Error ? error.message : "Demo request failed";
+      if (
+        message.toLowerCase().includes("capability expired") ||
+        message.toLowerCase().includes("no reward round remaining")
+      )
+        clearSession();
+      setStatus(message);
     } finally {
       setBusy(false);
     }
+  }
+  function persistSession(next: StoredDemoSession) {
+    window.sessionStorage.setItem(
+      demoSessionStorageKey,
+      serializeDemoSession(next),
+    );
+    setSession(next);
+  }
+  function clearSession() {
+    window.sessionStorage.removeItem(demoSessionStorageKey);
+    setSession(null);
   }
   return (
     <section className="demo-console">
@@ -80,12 +134,12 @@ export function DemoConsole({ campaign }: { campaign: string | null }) {
           disabled={busy || Boolean(session)}
           onClick={() => void create()}
         >
-          Start demo session
+          {busy && !session ? "Preparing demo session…" : "Start demo session"}
         </button>
         <button
           type="button"
           className="goal-trigger"
-          disabled={busy || !session}
+          disabled={busy || !session || session.remainingGoals === 0}
           onClick={() => void goal()}
         >
           <span>GOAL</span>
@@ -103,14 +157,13 @@ export function DemoConsole({ campaign }: { campaign: string | null }) {
       <p className="demo-status" aria-live="polite">
         {status}
       </p>
-      {campaign ? (
-        <Link className="proof-link" href={`/campaign/${campaign}`}>
+      {session ? (
+        <Link className="proof-link" href={`/campaign/${session.campaign}`}>
           Open the live fan experience →
         </Link>
       ) : (
-        <p className="inline-error">
-          Set NEXT_PUBLIC_DEMO_CAMPAIGN after preparing the pre-funded Devnet
-          campaign.
+        <p className="demo-status">
+          A fresh funded campaign is prepared automatically when you start.
         </p>
       )}
     </section>

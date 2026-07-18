@@ -72,6 +72,19 @@ const schema = z.object({
     .min(1n)
     .max(1_000_000_000_000n)
     .default(500_000_000n),
+  DEMO_ROUND_COUNT: z.coerce.number().int().min(1).max(8).default(8),
+  DEMO_REWARD_AMOUNT_BASE_UNITS: z.coerce
+    .bigint()
+    .min(1n)
+    .max(1_000_000_000_000n)
+    .default(1_000_000n),
+  DEMO_WINNER_CAP: z.coerce.number().int().min(1).max(100).default(5),
+  DEMO_CAMPAIGN_LIFETIME_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(14_400)
+    .max(82_800)
+    .default(82_800),
   RECEIPT_CAPABILITY_KEY: z.string().min(32).optional(),
   TXLINE_GUEST_JWT: z.string().optional(),
   TXLINE_API_TOKEN: z.string().optional(),
@@ -79,6 +92,7 @@ const schema = z.object({
   ORACLE_KEYPAIR: z.string().optional(),
   RELAYER_KEYPAIR: z.string().optional(),
   DEMO_AUTHORITY_KEYPAIR: z.string().optional(),
+  OPERATOR_KEYPAIR: z.string().optional(),
   FEE_PAYER_KEYPAIR: z.string().optional(),
   FEE_PAYER_MIN_LAMPORTS: z.coerce
     .number()
@@ -103,8 +117,8 @@ export function loadConfig(
     "settlement-worker": ["RELAYER_KEYPAIR", "FEE_PAYER_KEYPAIR"],
     "demo-controller": [
       "DEMO_AUTHORITY_KEYPAIR",
+      "OPERATOR_KEYPAIR",
       "FEE_PAYER_KEYPAIR",
-      "DEMO_CAMPAIGN",
     ],
   };
   if (role === "txline-listener" && config.TXLINE_LISTENER_ENABLED) {

@@ -55,4 +55,14 @@ describe("service role configuration", () => {
       "TXLINE_GUEST_JWT is required for txline-listener",
     );
   });
+
+  it("keeps the Devnet mint authority scoped to the demo controller", () => {
+    const environment = apiEnvironment();
+    environment.DEMO_AUTHORITY_KEYPAIR = relayerSecret;
+    expect(() => loadConfig("demo-controller", environment)).toThrow(
+      "OPERATOR_KEYPAIR is required for demo-controller",
+    );
+    environment.OPERATOR_KEYPAIR = relayerSecret;
+    expect(loadConfig("demo-controller", environment).DEMO_ROUND_COUNT).toBe(8);
+  });
 });

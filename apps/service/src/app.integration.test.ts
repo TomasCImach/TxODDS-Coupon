@@ -55,7 +55,7 @@ integration("GoalDrop HTTP contracts", () => {
       DEFAULT_HARD_EXPIRY_SECONDS: "28800",
       TXLINE_PUBLIC_OUTPUT_ENABLED: "false",
       TXLINE_RAW_RETENTION_ENABLED: "false",
-      DEMO_MODE_ENABLED: "false",
+      DEMO_MODE_ENABLED: "true",
       RELAYER_KEYPAIR: Buffer.from(relayer.secretKey).toString("base64"),
       RECEIPT_CAPABILITY_KEY: Buffer.from(nacl.randomBytes(32)).toString(
         "base64",
@@ -64,7 +64,7 @@ integration("GoalDrop HTTP contracts", () => {
     });
     pool = createPool(databaseUrl);
     await pool.query(`TRUNCATE TABLE
-      analytics_events, demo_faucet_claims, sponsored_transaction_templates, chain_transactions, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
+      analytics_events, demo_sessions, demo_campaigns, demo_runtime, demo_faucet_claims, sponsored_transaction_templates, chain_transactions, receipts, claim_requests, registration_requests, round_sequences, intent_challenges,
       registration_projections, round_projections, campaign_projections, fixture_catalog,
       txline_events, txline_cursors, goal_decisions, audit_log,
       outbox, application_events RESTART IDENTITY CASCADE`);
@@ -75,6 +75,17 @@ integration("GoalDrop HTTP contracts", () => {
        ) VALUES ($1,99,$2,'active',$3,$2,clock_timestamp() + interval '1 hour',clock_timestamp() + interval '30 minutes',
                  clock_timestamp() + interval '3 hours',clock_timestamp() + interval '8 hours',100000,100000,1,'confirmed')`,
       [campaign, sponsor, mint],
+    );
+    await pool.query(
+      `INSERT INTO demo_campaigns (
+         campaign, generation, fixture_id, campaign_nonce, status, is_current
+       ) VALUES ($1,1,99,1,'ready',true)`,
+      [campaign],
+    );
+    await pool.query(
+      `INSERT INTO demo_runtime (singleton, generation, status, campaign)
+       VALUES (true,1,'ready',$1)`,
+      [campaign],
     );
     await pool.query(
       `INSERT INTO round_projections (
@@ -103,6 +114,22 @@ integration("GoalDrop HTTP contracts", () => {
   afterAll(async () => {
     await app.close();
     await pool.end();
+  });
+
+  it("starts a demo session from the current rotated campaign", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/demo/sessions",
+      headers: { origin: "http://localhost:3000" },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      campaign,
+      expiresInSeconds: 900,
+      remainingGoals: 7,
+      label: "SIMULATED DEVNET EVENT",
+    });
   });
 
   it("issues and durably accepts a signed registration intent", async () => {
@@ -340,7 +367,7 @@ integration("GoalDrop HTTP contracts", () => {
       expect(response.json()).toMatchObject({
         status: "degraded",
         degraded: ["live_feed"],
-        demoMode: false,
+        demoMode: true,
       });
     } finally {
       config.TXLINE_LISTENER_ENABLED = true;

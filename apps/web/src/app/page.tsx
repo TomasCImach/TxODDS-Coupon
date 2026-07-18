@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { getFixtures } from "../lib/api";
-import { resolveDemoCampaign } from "../lib/demo-config";
 
 export default async function HomePage() {
   const fixtures = await getFixtures();
-  const demoCampaign = resolveDemoCampaign(
-    process.env.NEXT_PUBLIC_DEMO_CAMPAIGN,
-    process.env.DEMO_CAMPAIGN,
-  );
   return (
     <>
       <section className="hero">
@@ -24,18 +19,9 @@ export default async function HomePage() {
             rank.
           </p>
           <div className="hero-actions">
-            {demoCampaign ? (
-              <Link
-                className="primary-button"
-                href={`/campaign/${demoCampaign}`}
-              >
-                Enter the match
-              </Link>
-            ) : (
-              <Link className="primary-button" href="/demo">
-                Launch Demo Mode
-              </Link>
-            )}
+            <Link className="primary-button" href="/demo">
+              Launch Demo Mode
+            </Link>
             <Link className="secondary-button" href="/sponsor">
               Build a campaign
             </Link>

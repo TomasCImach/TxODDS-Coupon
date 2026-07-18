@@ -46,6 +46,7 @@ export async function createApp(
                 "RELAYER_KEYPAIR",
                 "ORACLE_KEYPAIR",
                 "DEMO_AUTHORITY_KEYPAIR",
+                "OPERATOR_KEYPAIR",
                 "FEE_PAYER_KEYPAIR",
               ],
               censor: "[REDACTED]",
